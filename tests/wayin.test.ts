@@ -33,6 +33,9 @@ describe("their site from a search", () => {
     // A domain that carries the name wins over an earlier result that only names them in its title.
     const later = [{ url: "https://news.example/jobs/copperline", title: "Copperline Ventures jobs", snippet: "" }, ...hits];
     expect(pickSite(later, "Copperline Ventures")).toBe("https://copperline.example/");
+    // A domain with only part of the first word is someone else's.
+    expect(pickSite([{ url: "https://www.arden.com/", title: "Arden", snippet: "" }], "Ardenwood Ventures")).toBe(null);
+    expect(pickSite([{ url: "https://collidecap.com/", title: "Home", snippet: "" }], "Collide Capital")).toBe("https://collidecap.com/");
     // A title that names them further in is a page about them, not their site.
     expect(pickSite([{ url: "https://agency.example/partners", title: "Our partners: Copperline Ventures and others", snippet: "" }], "Copperline Ventures")).toBe(null);
   });

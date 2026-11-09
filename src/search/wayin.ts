@@ -42,7 +42,8 @@ export function siteBase(url: string): string | null {
 export function pickSite(hits: SearchHit[], name: string): string | null {
   const m = matcherFor(name);
   if (m === null) return null;
-  const compact = nameWords(name).join("");
+  const words = nameWords(name);
+  const compact = words.join("");
   let byTitleOnly: string | null = null;
   for (const hit of hits) {
     let u: URL;
@@ -55,7 +56,9 @@ export function pickSite(hits: SearchHit[], name: string): string | null {
     const base = siteBase(hit.url) ?? "";
     if (NOT_THEIR_SITE.test(base)) continue;
     const label = base.split(".")[0]!.replace(/[^a-z0-9]/g, "");
-    const byDomain = compact.length >= 3 && (label.includes(compact) || (label.length >= 4 && compact.startsWith(label)));
+    // The domain holds the whole name, or a short form of it that keeps the first word whole
+    // ("collidecap" for Collide Capital), never part of a word ("arden" for Ardenwood).
+    const byDomain = compact.length >= 3 && (label.includes(compact) || (label.length >= Math.max(4, words[0]!.length) && compact.startsWith(label)));
     // A title counts when it starts with the name, as a site's own pages do ("Copperline Ventures:
     // seed fund"); a news or partner page names them further in.
     const title = prepareSentence(hit.title);
