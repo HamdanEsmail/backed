@@ -23,7 +23,7 @@ grep -m1 '^WEBHOOK_SECRET=' .dev.vars | cut -d= -f2- | tr -d '\r\n' | npx wrangl
 ## First deploy
 
 1. `npx wrangler d1 create backed`, then put the `database_id` it prints into `wrangler.jsonc`.
-2. `npm run migrate:remote` (applies `migrations/0001` to `0004`).
+2. `npm run migrate:remote` (applies `migrations/0001` to `0005`).
 3. `npm run check`, then `npx wrangler deploy` with `SITE_ENABLED` `"0"` in `wrangler.jsonc`: the API answers, every
    page path answers the JSON 404.
 4. Set the three secrets (above).
@@ -69,6 +69,8 @@ Only after the three demo searches are in and every route and both exports answe
 
 - `npx wrangler tail backed --format pretty` shows each request with its CPU time and any error.
 - `GET /api/stats`: searches by state, companies, and every TinyFish call and its cost by service.
+- A run's cost is booked when it ends and settled from a second wallet read 10 minutes later
+  (`searches.cost_settled_at`); `spend_usd` in `/api/stats` should then match the wallet's fall.
 - A search stuck in a state: its row in `searches` (`state`, `dataset_status`, `synced_at`, `failed_reason`), and
   the run slot (`SELECT * FROM run_slot`). A run slot held for more than 45 minutes no longer blocks the queue.
 
