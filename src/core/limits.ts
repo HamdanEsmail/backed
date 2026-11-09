@@ -29,7 +29,13 @@ export const CHECKS_PER_ADVANCE = 5;
 export const CHECK_CLAIM_STALE_MINUTES = 2;
 /** An announcement or an investor's page is waited for this long at most. */
 export const READ_TIMEOUT_MS = 10_000;
-/** A search with fewer proved companies than this when TinySet ends is failed, not ranked. */
+/** One `advance` call starts no new announcement read after this long, so it ends well inside the
+ *  time a Worker keeps running after its response. */
+export const ADVANCE_BUDGET_MS = 18_000;
+/** A quotation longer than this is cut to the clause around the investor's name. */
+export const QUOTE_MAX_CHARS = 170;
+/** A search whose TinySet run failed or was cancelled is ranked from what it found only when at
+ *  least this many companies were proved; otherwise it fails and nothing is ranked. */
 export const MIN_PROVED_TO_RANK = 5;
 /** Below this many proved companies the ranked list says it is thin. */
 export const THIN_BELOW = 10;

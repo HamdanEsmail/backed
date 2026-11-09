@@ -53,6 +53,9 @@ export type Dataset = {
   rowCount: number;
   targetRows: number | null;
   run: DatasetRun | null;
+  /** The spec the dataset was made from, as TinySet holds it; null when the answer has none. */
+  spec: DatasetSpec | null;
+  createdAt: string | null;
 };
 
 export type DatasetRow = { id: string; data: Record<string, unknown> };
@@ -100,7 +103,15 @@ export function parseDataset(body: unknown): Dataset {
     rowCount: typeof d.row_count === "number" && Number.isFinite(d.row_count) ? d.row_count : 0,
     targetRows: typeof d.target_rows === "number" && Number.isFinite(d.target_rows) ? d.target_rows : null,
     run: parseRun(d.run),
+    spec: isSpec(d.spec) ? d.spec : null,
+    createdAt: str(d.created_at),
   };
+}
+
+function isSpec(v: unknown): v is DatasetSpec {
+  if (v === null || typeof v !== "object") return false;
+  const s = v as Record<string, unknown>;
+  return typeof s.name === "string" && typeof s.description === "string" && Array.isArray(s.columns);
 }
 
 /**

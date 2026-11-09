@@ -73,6 +73,8 @@ describe("createDataset", () => {
       rowCount: 0,
       targetRows: 30,
       run: { id: RUN_ID, status: "queued", startedAt: "2026-11-09T10:00:00.000Z", finishedAt: null, error: null },
+      spec: SPEC,
+      createdAt: "2026-11-09T10:00:00.000Z",
     });
     expect(await spendRows()).toEqual([{ kind: "dataset", amount_usd: 0, ref: DATASET_ID }]);
   });
