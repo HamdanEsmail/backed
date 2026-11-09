@@ -24,11 +24,12 @@ import { ScoreSheet } from "./home";
 
 type Stats = Awaited<ReturnType<typeof readStats>>;
 
-function Plain(props: { title: string; description: string; heading: string; lede: string; saved: number; children?: Child; after?: Child }) {
+function Plain(props: { title: string; description: string; heading: string; lede: string; saved: number; children?: Child; after?: Child; aside?: Child }) {
   return (
     <Layout title={props.title} description={props.description}>
       <Nav home={false} className="top" />
-      <section class="plain">
+      <section class={props.aside ? "plain with-aside" : "plain"}>
+        {props.aside ?? null}
         <div class="body">
           <h1>{props.heading}</h1>
           <p class="lede">{props.lede}</p>
@@ -208,6 +209,26 @@ export function AboutPage(props: { stats: Stats; saved: number }) {
       heading="One line in, the investors who backed companies like it out."
       lede="Backed is a starting list for a founder: who funded companies like yours in the last eighteen months, each match proved by the sentence its own announcement printed."
       saved={props.saved}
+      aside={
+        <div class="figures">
+          <div>
+            <b class="num">{t.tinyset.calls}</b>
+            <span>TinySet calls, {plural(t.tinyset.runs, "run")}</span>
+          </div>
+          <div>
+            <b class="num">{t.fetch.calls}</b>
+            <span>pages read with Fetch</span>
+          </div>
+          <div>
+            <b class="num">{t.search.calls}</b>
+            <span>Search calls</span>
+          </div>
+          <div>
+            <b class="num">{usd(props.stats.spend_usd)}</b>
+            <span>spent in all, from the ledger</span>
+          </div>
+        </div>
+      }
     >
       <div class="text">
         <h2>How it uses TinyFish</h2>
