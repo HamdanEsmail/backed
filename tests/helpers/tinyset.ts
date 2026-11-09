@@ -16,6 +16,8 @@ export type FakeTinyFish = {
   /** Balances the wallet answers with, in order; the last one repeats. */
   wallet: string[];
   pages: Record<string, string>;
+  /** Pages whose next read fails with this TinyFetch error code, once each. */
+  failOnce: Record<string, string>;
   /** Links a page answers with, by address. */
   links: Record<string, string[]>;
   /** Search results by query. */
@@ -35,6 +37,7 @@ export function fakeTinyFish(): FakeTinyFish {
     rows: [],
     wallet: ["10.00"],
     pages: {},
+    failOnce: {},
     links: {},
     results: {},
     queries: [],
@@ -92,6 +95,11 @@ export function fakeTinyFish(): FakeTinyFish {
     reply: (_req, body) => {
       const url = (body as { urls: string[] }).urls[0]!;
       tf.reads[url] = (tf.reads[url] ?? 0) + 1;
+      const failure = tf.failOnce[url];
+      if (failure !== undefined) {
+        delete tf.failOnce[url];
+        return Response.json({ results: [], errors: [{ url, error: failure }] });
+      }
       const text = tf.pages[url];
       return Response.json(
         text === undefined ? { results: [], errors: [{ url, error: "target_unreachable" }] } : { results: [{ text, final_url: url, links: tf.links[url] ?? [] }] },

@@ -56,7 +56,7 @@ describe("fetchPage", () => {
       reply: { json: { results: [{ text: "Larder Loop raised $4M.", title: "Larder Loop raises", final_url: `${PAGE}/` }] } },
     });
     const page = await fetchPage(env, PAGE);
-    expect(fetchMock.calls[0]!.body).toEqual({ urls: [PAGE], format: "markdown", ttl: 0, per_url_timeout_ms: 9_000 });
+    expect(fetchMock.calls[0]!.body).toEqual({ urls: [PAGE], format: "markdown", ttl: 0, per_url_timeout_ms: 14_000 });
     expect(page).toEqual({ ok: true, text: "Larder Loop raised $4M.", title: "Larder Loop raises", finalUrl: `${PAGE}/`, links: [] });
     expect(await spendRows()).toEqual([{ kind: "fetch", amount_usd: 0, ref: PAGE }]);
   });
@@ -75,10 +75,10 @@ describe("fetchPage", () => {
     expect(await fetchPage(env, PAGE)).toEqual({ ok: false, error: "fetch_error" });
   });
 
-  it("answers a failed call with its status, without throwing", async () => {
+  it("answers a failed call with its status, without throwing, and books the call", async () => {
     fetchMock.intercept({ method: "POST", url: FETCH_API, reply: { status: 503, json: { error: { code: "SERVICE_BUSY" } } } });
     expect(await fetchPage(env, PAGE)).toEqual({ ok: false, error: "SERVICE_BUSY", status: 503 });
-    expect(await spendRows()).toEqual([]);
+    expect(await spendRows()).toEqual([{ kind: "fetch", amount_usd: 0, ref: PAGE }]);
   });
 
   it("gives up when the read runs out of time", async () => {
@@ -94,5 +94,6 @@ describe("fetchPage", () => {
     const started = Date.now();
     expect(await fetchPage(env, PAGE, { timeoutMs: 50 })).toEqual({ ok: false, error: "timeout" });
     expect(Date.now() - started).toBeLessThan(5_000);
+    expect(await spendRows()).toEqual([{ kind: "fetch", amount_usd: 0, ref: PAGE }]);
   });
 });

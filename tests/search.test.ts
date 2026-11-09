@@ -197,6 +197,45 @@ describe("a search from queued to ready", () => {
   });
 });
 
+describe("an announcement read that fails for a passing reason", () => {
+  it("is tried again in a later call and proves, with one ledger row per read", async () => {
+    const id = await newSearch();
+    await advance(env, id, at(0));
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    tf.failOnce[URL_A] = "timeout";
+    expect((await advance(env, id, at(11))).did).toEqual(["read:1", "run_ended:ready", "read_again:Larder Loop"]);
+    // Not before the retry time, then read again.
+    expect((await advance(env, id, at(20))).did).toEqual([]);
+    const later = await advance(env, id, at(45));
+    expect(later.did.slice(0, 1)).toEqual(["proved:Larder Loop"]);
+    expect(later.state).toBe("ready");
+    const reads = await env.DB.prepare("SELECT COUNT(*) AS n FROM spend WHERE kind = 'fetch' AND ref = ?").bind(URL_A).first<{ n: number }>();
+    expect(reads?.n).toBe(2);
+  });
+
+  it("is set apart as unreadable after three failed reads, and a refused page at once", async () => {
+    const id = await newSearch();
+    await advance(env, id, at(0));
+    const urlD = "https://news.example/blocked";
+    tf.rows = [ROW_A, companyRow("row-d", { company: "Blocked Kitchens", round_type: "Seed", announcement_date: "2026-01-10", lead_investor: "Copperline Ventures", announcement_url: urlD })];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    tf.pages[urlD] = "never read";
+    tf.failOnce[urlD] = "bot_blocked";
+    tf.failOnce[URL_A] = "timeout";
+    const first = await advance(env, id, at(11));
+    expect(first.did).toEqual(["read:2", "run_ended:ready", "read_again:Larder Loop", "set_apart:Blocked Kitchens"]);
+    tf.failOnce[URL_A] = "timeout";
+    expect((await advance(env, id, at(45))).did).toEqual(["read_again:Larder Loop"]);
+    tf.failOnce[URL_A] = "timeout";
+    await advance(env, id, at(80));
+    const view = (await readSearch(env.DB, id))!;
+    expect(view.companies.find((c) => c.name === "Larder Loop")).toMatchObject({ state: "set_apart", set_apart_reason: "unreadable" });
+  });
+});
+
 describe("the run's end and its cost", () => {
   it("does not end a run while the dataset reads empty and the run is still going", async () => {
     const id = await newSearch();

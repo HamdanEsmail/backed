@@ -66,6 +66,8 @@ export type CompanyRow = {
   founders_named_json: string | null;
   found_at: string;
   updated_at: string;
+  read_attempts: number;
+  retry_at: string | null;
 };
 
 export type CompanyInvestorRow = {
@@ -137,6 +139,8 @@ export async function storeRows(db: D1Database, searchId: string, rows: DatasetR
              announcement_url = excluded.announcement_url,
              state = CASE WHEN companies.check_key = excluded.check_key THEN companies.state ELSE 'unchecked' END,
              claimed_at = CASE WHEN companies.check_key = excluded.check_key THEN companies.claimed_at ELSE NULL END,
+             read_attempts = CASE WHEN companies.check_key = excluded.check_key THEN companies.read_attempts ELSE 0 END,
+             retry_at = CASE WHEN companies.check_key = excluded.check_key THEN companies.retry_at ELSE NULL END,
              set_apart_reason = CASE WHEN companies.check_key = excluded.check_key THEN companies.set_apart_reason ELSE NULL END,
              check_key = excluded.check_key,
              updated_at = CASE WHEN companies.check_key = excluded.check_key THEN companies.updated_at ELSE excluded.updated_at END`,
@@ -174,8 +178,9 @@ export async function storeRows(db: D1Database, searchId: string, rows: DatasetR
   return kept.length;
 }
 
-/** Claims the next company to check: unchecked, or claimed so long ago its check must have died.
- *  One statement, so a company is claimed by one caller at a time. */
+/** Claims the next company to check: unchecked (and not waiting to be read again), or claimed so
+ *  long ago its check must have died. Companies read fewer times go first. One statement, so a
+ *  company is claimed by one caller at a time. */
 export async function claimCompany(db: D1Database, searchId: string, now: Date): Promise<CompanyRow | null> {
   const staleBefore = new Date(now.getTime() - CHECK_CLAIM_STALE_MINUTES * 60_000).toISOString();
   return db
@@ -183,12 +188,25 @@ export async function claimCompany(db: D1Database, searchId: string, now: Date):
       `UPDATE companies SET state = 'checking', claimed_at = ?1
        WHERE id = (SELECT id FROM companies
                    WHERE search_id = ?2 AND removed = 0
-                     AND (state = 'unchecked' OR (state = 'checking' AND claimed_at < ?3))
-                   ORDER BY found_at, row_id LIMIT 1)
+                     AND ((state = 'unchecked' AND (retry_at IS NULL OR retry_at <= ?4)) OR (state = 'checking' AND claimed_at < ?3))
+                   ORDER BY read_attempts, found_at, row_id LIMIT 1)
        RETURNING *`,
     )
-    .bind(`${now.toISOString()}#${crypto.randomUUID()}`, searchId, staleBefore)
+    .bind(`${now.toISOString()}#${crypto.randomUUID()}`, searchId, staleBefore, now.toISOString())
     .first<CompanyRow>();
+}
+
+/** Puts a claimed company back to be read again after `retryAt`, counting the failed read. Only
+ *  while the claim still holds. */
+export async function readAgainLater(db: D1Database, claimed: CompanyRow, retryAt: Date): Promise<boolean> {
+  const r = await db
+    .prepare(
+      `UPDATE companies SET state = 'unchecked', read_attempts = read_attempts + 1, retry_at = ?
+       WHERE id = ? AND claimed_at = ? AND check_key = ? AND state = 'checking'`,
+    )
+    .bind(retryAt.toISOString(), claimed.id, claimed.claimed_at, claimed.check_key)
+    .run();
+  return r.meta.changes === 1;
 }
 
 /**

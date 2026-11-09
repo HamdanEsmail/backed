@@ -2,7 +2,7 @@
 // Used to read every announcement (the proof check) and an investor's own site (the way in).
 import { PRICES, READ_TIMEOUT_MS } from "../core/limits";
 import type { Env } from "../env";
-import { errorCodeOrNull, readJson, TinyFishError, tinyfishFetch } from "./client";
+import { errorCodeOrNull, noteSpend, readJson, TinyFishError, tinyfishFetch } from "./client";
 
 const FETCH_API = "https://api.fetch.tinyfish.ai";
 /** TinyFetch is asked to give up on the page this much before the call itself is abandoned, so a
@@ -43,7 +43,8 @@ function isAbort(err: unknown): boolean {
  * Reads one page, always fresh (`ttl: 0`). It never throws for a page that cannot be read: a
  * per-URL failure comes back as `{ ok: false, error }` with TinyFetch's own code, a failed call as
  * its HTTP error code with `status`, and a read that ran out of time as `timeout`. The caller must
- * never treat a failed read as an empty page.
+ * never treat a failed read as an empty page. Every call, whatever came of it, is one $0 ledger row,
+ * so the ledger shows each read, the ones tried again included.
  */
 export async function fetchPage(env: Env, url: string, opts: FetchPageOptions = {}): Promise<FetchPageResult> {
   const timeoutMs = opts.timeoutMs ?? READ_TIMEOUT_MS;
@@ -59,14 +60,20 @@ export async function fetchPage(env: Env, url: string, opts: FetchPageOptions = 
         ...(opts.links ? { links: true } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
-      spend: { kind: "fetch", amountUsd: PRICES.fetch, ref: url },
     });
     body = await readJson<FetchBody>(res);
   } catch (err) {
-    if (err instanceof TinyFishError) return { ok: false, error: err.code, status: err.status };
-    if (isAbort(err)) return { ok: false, error: "timeout" };
+    if (err instanceof TinyFishError) {
+      await noteSpend(env, { kind: "fetch", amountUsd: PRICES.fetch, ref: url });
+      return { ok: false, error: err.code, status: err.status };
+    }
+    if (isAbort(err)) {
+      await noteSpend(env, { kind: "fetch", amountUsd: PRICES.fetch, ref: url });
+      return { ok: false, error: "timeout" };
+    }
     throw err;
   }
+  await noteSpend(env, { kind: "fetch", amountUsd: PRICES.fetch, ref: url });
 
   if (body.errors && body.errors.length > 0) return { ok: false, error: errorText(body.errors[0]) };
   const first = body.results?.[0];

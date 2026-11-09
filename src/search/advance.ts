@@ -18,6 +18,8 @@ import {
   DATASET_READ_EVERY_SECONDS,
   MIN_PROVED_TO_RANK,
   PRICES,
+  READ_ATTEMPTS,
+  READ_RETRY_AFTER_SECONDS,
   SEARCH_BUDGET_USD,
   SEARCH_TIMEOUT_MINUTES,
   TARGET_ROWS,
@@ -41,6 +43,7 @@ import {
   companyCounts,
   factsOfRow,
   getSearch,
+  readAgainLater,
   saveCheck,
   stagesOf,
   storeRows,
@@ -219,6 +222,12 @@ async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<v
 
 // --- checking ------------------------------------------------------------------------------------
 
+/** A failed read worth trying again: a timeout (ours or TinyFetch's), too many requests, or a
+ *  server error. */
+function passingFailure(page: { error: string; status?: number }): boolean {
+  return /timeout|timed_out/i.test(page.error) || page.status === 429 || (page.status !== undefined && page.status >= 500);
+}
+
 /** Checks companies one at a time: as many as are refused without a read, plus up to
  *  CHECKS_PER_ADVANCE reads, while the call is inside its time budget. */
 async function check(env: Env, s: SearchRow, now: Date, startedMs: number, did: string[]): Promise<void> {
@@ -235,6 +244,13 @@ async function check(env: Env, s: SearchRow, now: Date, startedMs: number, did: 
     }
     reads++;
     const page = await fetchPage(env, facts.announcementUrl!);
+    // A read that ran out of time or met a busy service may work later: the company goes back in
+    // line, up to READ_ATTEMPTS reads in all. A page that was read, or refused for good, is final.
+    if (!page.ok && passingFailure(page) && c.read_attempts + 1 < READ_ATTEMPTS) {
+      await readAgainLater(env.DB, c, new Date(now.getTime() + READ_RETRY_AFTER_SECONDS * 1000));
+      did.push(`read_again:${c.name}`);
+      continue;
+    }
     const readAt = new Date().toISOString();
     const result = checkCompany(facts, s.window_start, stages, page.ok ? { text: page.text, title: page.title } : null);
     await saveCheck(env.DB, c, result, { pageUrl: page.ok ? page.finalUrl : facts.announcementUrl, readAt }, now);
