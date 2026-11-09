@@ -69,8 +69,7 @@ with its cost. Written on 9 November 2026, the day it went live.
   another startup", and the refusal shows on the home's form.
 - **The CSV is also at `/api/searches/:id.csv`**, the same file as the page's export.
 - **No preview uploads at Tasks 4 and 5.** I looked at the site locally against a copy of the real restaurant
-  search instead (headless Chrome at 1440 and 390) and kept every Cloudflare upload for the deploy that Hamdan
-  approved.
+  search instead (headless Chrome at 1440 and 390) and kept every Cloudflare upload for the deploy itself.
 
 ### After the demo searches (Task 6)
 
@@ -141,7 +140,7 @@ round stage); UAE, two companies proved, Astral (MapleVC) and Aristotle (True Ve
   is reached. Backed deletes only the Monitor ids it stored; it never lists, pauses or edits any other.
 - **Migration `0007`**: `watches`, `watch_runs`, `watch_hits`. The search's page says "New since <date>" with the
   companies the watch added, and marks each one "Found by the watch" in the list of companies.
-- **Live on 9 November** (version `c88bbb30`), with Hamdan's yes: migration `0007` applied first, then the deploy,
+- **Live on 9 November** (version `c88bbb30`): migration `0007` applied first, then the deploy,
   then the three Monitors, watching the demo searches until 17 November at 06:00 and 18:00 UTC. Each Monitor
   reads "active" with no error. Their creation runs sent no webhook (nothing new within the day), and the wallet
   had not moved from $37.052 three minutes later, so the $0.005 rate is still to be confirmed against it.
@@ -238,7 +237,8 @@ or to the score, so the page that says how TinyFish is used could only be reache
   rounded to $0.01; on a phone, the last step no longer touches the dark band under it; a link on a white field
   shows its focus ring in ink.
 
-No script was added and nothing is read from TinyFish to draw these pages. 164 tests.
+No script was added and nothing is read from TinyFish to draw these pages. I looked at each one at 1440 and 390
+wide on a preview upload that reads the live data, before the deploy. 164 tests.
 
 ## Paid calls
 
