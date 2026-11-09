@@ -4,7 +4,7 @@
 // founder's email built from proved facts. The parsing is pure; `lookUpInvestor` does the reads.
 import { INVESTOR_REUSE_DAYS, WAY_IN_ATTEMPTS } from "../core/limits";
 import { matcherFor, nameHits, nameWords, prepareSentence } from "../core/names";
-import { STAGE_LABELS, type Stage } from "../core/stages";
+import { stageInText, type Stage } from "../core/stages";
 import type { Env } from "../env";
 import { TinyFishError } from "../tinyfish/client";
 import { fetchPage } from "../tinyfish/fetch";
@@ -175,7 +175,7 @@ export function warmRoute(deals: WarmDeal[]): WarmPerson[] {
   return out;
 }
 
-const roundWords = (stage: Stage) => (stage === "pre-seed" || stage === "seed" ? `${STAGE_LABELS[stage].toLowerCase()} round` : `${STAGE_LABELS[stage]} round`);
+const roundWords = (stage: Stage) => `${stageInText(stage)} round`;
 export const possessive = (name: string) => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
 
 /** The founder's line inside a sentence: lowercased at its start unless its first word is written

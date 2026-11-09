@@ -3,7 +3,7 @@
 // `in_scope` column's hint, and TinySet does the judging.
 import { isCountry, type Country } from "../core/countries";
 import { LINE_MAX_CHARS, LINE_MIN_CHARS, WINDOW_MONTHS } from "../core/limits";
-import { isStage, STAGE_LABELS, stagesAround, type Stage } from "../core/stages";
+import { isStage, STAGE_LABELS, stageInText, stagesAround, type Stage } from "../core/stages";
 import type { DatasetSpec, SpecColumn } from "../tinyfish/datasets";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -28,7 +28,7 @@ export function monthYear(isoDate: string): string {
 
 /** "pre-seed, seed or Series A". */
 export function stageList(stages: Stage[]): string {
-  const words = stages.map((s) => (s === "pre-seed" || s === "seed" ? STAGE_LABELS[s].toLowerCase() : STAGE_LABELS[s]));
+  const words = stages.map(stageInText);
   return words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
 }
 

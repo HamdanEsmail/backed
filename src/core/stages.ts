@@ -10,6 +10,11 @@ export const STAGE_LABELS: Record<Stage, string> = {
   "series-b": "Series B",
 };
 
+/** A stage inside a sentence: "pre-seed", "seed", "Series A". */
+export function stageInText(stage: Stage): string {
+  return stage === "pre-seed" || stage === "seed" ? stage : STAGE_LABELS[stage];
+}
+
 export function isStage(value: unknown): value is Stage {
   return typeof value === "string" && (STAGES as readonly string[]).includes(value);
 }

@@ -117,7 +117,35 @@ describe("the site", () => {
     expect(ready.html).toContain("What TinySet was asked");
     await env.DB.prepare("UPDATE searches SET state = 'failed', failed_reason = 'run_failed' WHERE id = ?").bind(id).run();
     const failed = await page(`/searches/${id}`);
-    expect(failed.html).toContain("This search did not finish: TinySet stopped before it finished, and too few companies were proved. Nothing was ranked.");
+    expect(failed.html).toContain("This search did not finish: TinySet stopped early and too few companies were proved. Nothing was ranked.");
+  });
+
+  it("writes stages as pre-seed, seed and Series A, and the footer for one saved search", async () => {
+    tf.status = "ready";
+    tf.runStatus = "done";
+    tf.rows = [
+      companyRow("row-b", { company: "Shelfcount", round_type: "Series A", announcement_date: "2026-03-01", lead_investor: "Copperline Ventures", announcement_url: URL_A }),
+    ];
+    tf.pages[URL_A] = "Shelfcount raised a $9M Series A round led by Copperline Ventures.";
+    const id = await importSearch(env, DATASET_ID, { ...INPUT, stage: "series-a" }, 1, T0);
+    await advance(env, id, T0);
+    const { html } = await page(`/searches/${id}`);
+    expect(html).toContain("Series A");
+    expect(html).not.toMatch(/series a/);
+    expect(html).toContain("One saved search is free to open, with every investor");
+  });
+
+  it("refuses a second search from the same visitor with its sentence", async () => {
+    const post = (line: string) =>
+      callWorker("/search", {
+        method: "POST",
+        body: new URLSearchParams({ line, stage: "seed", country: "Kenya" }),
+        headers: { "content-type": "application/x-www-form-urlencoded", "CF-Connecting-IP": "203.0.113.7" },
+      });
+    expect((await post("Cold storage for smallholder farmers in villages")).status).toBe(303);
+    const second = await post("Solar dryers for mango farmers and their cooperatives");
+    expect(second.status).toBe(429);
+    expect(await second.text()).toContain("You have started today&#39;s search from here already.");
   });
 
   it("answers an unknown search with the not-found page", async () => {

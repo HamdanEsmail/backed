@@ -61,11 +61,11 @@ export function Footer(props: { saved: number }) {
           </li>
         </ul>
         <div class="two">
-          <p>
-            {props.saved > 0
-              ? `${props.saved === 1 ? "One saved search is" : `${props.saved} saved searches are`} free to open, each with every investor, every company and the proof.`
-              : "Saved searches are free to open, each with every investor, every company and the proof."}
-          </p>
+          {props.saved === 1 ? (
+            <p>One saved search is free to open, with every investor, every company and the proof.</p>
+          ) : props.saved > 1 ? (
+            <p>{props.saved} saved searches are free to open, each with every investor, every company and the proof.</p>
+          ) : null}
           <p>Every list downloads as CSV and JSON, with the proof link and the quoted sentence in each row.</p>
         </div>
         <p class="legal">

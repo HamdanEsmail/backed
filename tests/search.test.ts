@@ -295,7 +295,7 @@ describe("a search that does not finish", () => {
     tf.rows = [ROW_A, ROW_B, ROW_C];
     expect((await advance(env, id, at(11))).state).toBe("failed");
     const view = (await readSearch(env.DB, id))!;
-    expect(view.search.notice).toBe("This search did not finish: TinySet stopped before it finished, and too few companies were proved. Nothing was ranked.");
+    expect(view.search.notice).toBe("This search did not finish: TinySet stopped early and too few companies were proved. Nothing was ranked.");
     expect(view.investors).toEqual([]);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM ranking").first<{ n: number }>()).toEqual({ n: 0 });
   });

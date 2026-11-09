@@ -18,9 +18,9 @@ export const SET_APART: Record<string, string> = {
 /** Why a search did not finish, completing "This search did not finish: <reason>. Nothing was ranked." */
 export const FAILED: Record<string, string> = {
   none_found: "TinySet found no companies like this",
-  run_failed: "TinySet stopped before it finished, and too few companies were proved",
-  run_cancelled: "the TinySet run was stopped, and too few companies were proved",
-  timeout: "TinySet took too long, and too few companies were proved",
+  run_failed: "TinySet stopped early and too few companies were proved",
+  run_cancelled: "the TinySet run was stopped and too few companies were proved",
+  timeout: "TinySet took too long and too few companies were proved",
   start_failed: "TinySet would not start the search",
   spend_stop: "this demo has spent its budget",
 };

@@ -32,7 +32,7 @@ function Stage(props: { view: SearchView }) {
           </span>
         </div>
         <a class="go as-link" href="/#line">
-          {running ? "Search for another startup while this runs" : "Search for another startup"}
+          Search for another startup
         </a>
       </div>
       <div class="tally four">
@@ -145,6 +145,7 @@ function Ready(props: { view: SearchView }) {
           <p class="said">Companies like this were backed by</p>
           <FirstSheet inv={first} total={view.investors.length} view={view} href={href(first.slug)} />
           <Others investors={rest.slice(0, WAY_IN_ROWS - 1)} hrefFor={(inv) => href(inv.slug)} withWay />
+          {rest.length > WAY_IN_ROWS - 1 ? <p class="others-note">The way in is looked up for the first ten.</p> : null}
           <Others investors={rest.slice(WAY_IN_ROWS - 1)} hrefFor={(inv) => href(inv.slug)} withWay={false} rest />
           <div class="cells">
             <a href={`/searches/${view.search.id}.csv`}>

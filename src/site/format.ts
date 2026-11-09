@@ -1,5 +1,5 @@
 // Small ways of writing things on the pages: money, dates, stages, places, the score's parts.
-import { STAGE_LABELS, stageOfRound, type Stage } from "../core/stages";
+import { stageInText, stageOfRound, type Stage } from "../core/stages";
 import type { Part } from "../search/score";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -21,9 +21,9 @@ export function shortDate(iso: string | null): string {
   return `${d} ${MONTHS[(m ?? 1) - 1]} ${y}`;
 }
 
-/** A stage in running text: "seed", "pre-seed", "series a" (the comp's own spelling). */
+/** A stage in running text: "pre-seed", "seed", "Series A". */
 export function stageWord(stage: Stage | null): string {
-  return stage === null ? "round" : STAGE_LABELS[stage].toLowerCase();
+  return stage === null ? "round" : stageInText(stage);
 }
 
 export function roundStage(roundType: string | null): Stage | null {
