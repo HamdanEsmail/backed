@@ -8,10 +8,12 @@
  * - `fetch`, `search`: a TinyFetch or TinySearch call.
  * - `monitor_check`: a Topic Monitor created (its first run) or a Monitor run delivered.
  * - `wallet`: a wallet balance read.
+ * - `correction`: money spent outside the ledger's own rows, booked by hand with a note as its ref
+ *   (the TinySet runs made before Backed existed), so the spend stop sees it.
  */
-export type SpendKind = "dataset" | "dataset_run" | "fetch" | "search" | "monitor_check" | "wallet";
+export type SpendKind = "dataset" | "dataset_run" | "fetch" | "search" | "monitor_check" | "wallet" | "correction";
 
-export const SPEND_KINDS: readonly SpendKind[] = ["dataset", "dataset_run", "fetch", "search", "monitor_check", "wallet"];
+export const SPEND_KINDS: readonly SpendKind[] = ["dataset", "dataset_run", "fetch", "search", "monitor_check", "wallet", "correction"];
 
 /** Appends one row. `ref` says what it was for (a dataset id, a search id, a page's address). */
 export async function recordSpend(db: D1Database, kind: SpendKind, amountUsd: number, ref: string): Promise<void> {

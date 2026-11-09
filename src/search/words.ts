@@ -13,6 +13,7 @@ export const SET_APART: Record<string, string> = {
   unreadable: "the announcement could not be read",
   company_not_named: "the linked page does not name the company",
   no_investor_named: "the linked page names none of the listed investors",
+  prize_not_round: "a prize, an award or a grant, not an investment round",
 };
 
 /** Why a search did not finish, completing "This search did not finish: <reason>. Nothing was ranked." */

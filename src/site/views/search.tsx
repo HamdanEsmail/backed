@@ -9,6 +9,7 @@ import { monthYear } from "../../search/spec";
 import { SET_APART } from "../../search/words";
 import { FirstSheet, Names, Others } from "../components";
 import { Footer, Layout, Nav } from "../layout";
+import { place } from "../format";
 
 /** A running page reloads itself this often, in seconds. */
 export const REFRESH_SECONDS = 5;
@@ -138,6 +139,11 @@ function Ready(props: { view: SearchView }) {
   return (
     <section class="block lead-in ranked-end" id="list">
       {view.search.notice !== null ? <p class="note">{view.search.notice}</p> : null}
+      {view.search.none_in_country ? (
+        <p class="said elsewhere">
+          None of these companies is in {place(view.search.country)}. This list shows who funds companies like this elsewhere.
+        </p>
+      ) : null}
       {first === undefined ? (
         <p class="said">No investor was proved for this line.</p>
       ) : (

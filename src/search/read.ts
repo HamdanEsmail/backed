@@ -1,5 +1,6 @@
 // A search as the API and the pages read it: the search, its figures, the ranked investors with
 // every deal, quotation and part, and every company. Reads only what is stored.
+import { inCountry } from "../core/countries";
 import { THIN_BELOW, WAY_IN_TOP } from "../core/limits";
 import { STAGE_LABELS, stageOfRound, type Stage } from "../core/stages";
 import type { Part } from "./score";
@@ -107,6 +108,7 @@ export type SearchView = {
     failed_reason: string | null;
     /** The sentence the page shows for the search's state, when it has one. */
     notice: string | null;
+    none_in_country: boolean;
   };
   figures: { found: number; proved: number; set_apart: number; checking: number; investors: number };
   investors: InvestorView[];
@@ -116,6 +118,13 @@ export type SearchView = {
 };
 
 const founders = (json: string | null): string[] => (json === null ? [] : (JSON.parse(json) as string[]));
+
+/** The partner on a lead's deal: only the lead the announcement gives the partner to. */
+function partnerOf(c: CompanyRow, investorKey: string): string | null {
+  if (c.partner_named === null) return null;
+  if (c.partner_leads_json === null) return c.partner_named;
+  return (JSON.parse(c.partner_leads_json) as string[]).includes(investorKey) ? c.partner_named : null;
+}
 
 export async function readSearch(db: D1Database, id: string): Promise<SearchView | null> {
   const s = await getSearch(db, id);
@@ -177,8 +186,8 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
           quote: l.quote,
           source_url: c.page_url ?? c.announcement_url,
           read_at: c.read_at,
-          partner: l.role === "lead" ? c.partner_named : null,
-          partner_note: l.role === "lead" && c.partner_named === null ? NO_PARTNER : null,
+          partner: l.role === "lead" ? partnerOf(c, l.investor_key) : null,
+          partner_note: l.role === "lead" && partnerOf(c, l.investor_key) === null ? NO_PARTNER : null,
           founders: founders(c.founders_named_json),
           points: l.points ?? 0,
           parts: l.parts_json === null ? [] : (JSON.parse(l.parts_json) as Part[]),
@@ -253,6 +262,8 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
       cost_basis: s.cost_basis,
       failed_reason: s.failed_reason,
       notice,
+      // True when the list is ready and no proved company is in the founder's country.
+      none_in_country: s.state === "ready" && figures.proved > 0 && !companies.some((c) => c.state === "proved" && inCountry(c.country, s.country)),
     },
     figures,
     investors,

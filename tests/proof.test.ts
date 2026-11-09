@@ -100,6 +100,34 @@ describe("checkCompany", () => {
     expect(r.investors[0]!.quote).toBe("Larder Loop raised a seed round led by DayHarbour Capital.");
   });
 
+  it("sets apart money won in a competition or given as a grant, but not an award-winning company's round", () => {
+    const prize = "Larder Loop has won a $25,000 investment offer from Copperline Ventures after emerging as the winner of the Kitchen Cup 2026.";
+    expect(checkCompany(facts({ other_investors: null }), WINDOW, [...STAGES], { text: prize })).toMatchObject({ status: "set_apart", reason: "prize_not_round" });
+    const grant = "Larder Loop received a grant from Copperline Ventures to plan pantries.";
+    expect(checkCompany(facts({ other_investors: null }), WINDOW, [...STAGES], { text: grant })).toMatchObject({ reason: "prize_not_round" });
+    const round = "The award-winning Larder Loop raised a seed round led by Copperline Ventures.";
+    expect(checkCompany(facts({ other_investors: null }), WINDOW, [...STAGES], { text: round }).status).toBe("proved");
+  });
+
+  it("splits 'A & B' into two firms when the page names each, and keeps 'Wexley & Co' whole", () => {
+    const text = "Larder Loop raised a seed round led by Quayle Capital and Fenwick Labs, with Wexley & Co joining.";
+    const r = checkCompany(facts({ lead_investor: "Quayle Capital & Fenwick Labs", other_investors: "Wexley & Co" }), WINDOW, [...STAGES], { text });
+    expect(r.investors.map((i) => [i.name, i.role, i.named])).toEqual([
+      ["Quayle Capital", "lead", true],
+      ["Fenwick Labs", "lead", true],
+      ["Wexley & Co", "other", true],
+    ]);
+  });
+
+  it("gives the partner only to the co-lead the page names beside them", () => {
+    const text = [
+      "Larder Loop raised a seed round led by Copperline Ventures and Northgate Seed Fund.",
+      '"Kitchens waste less when they plan," said Tobias Quell, partner at Copperline Ventures.',
+    ].join(" ");
+    const r = checkCompany(facts({ lead_investor: "Copperline Ventures; Northgate Seed Fund", other_investors: null }), WINDOW, [...STAGES], { text });
+    expect(r).toMatchObject({ status: "proved", partner: "Tobias Quell", partnerLeads: ["copperline ventures"] });
+  });
+
   it("does not count an investor that is only part of a longer name", () => {
     const text = "Larder Loop raised a seed round led by Copperline Ventures Europe and Northgate Seed Funding Partners.";
     const r = checkCompany(facts(), WINDOW, [...STAGES], { text });

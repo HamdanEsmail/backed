@@ -115,6 +115,11 @@ describe("the site", () => {
     expect(ready.html).not.toContain('http-equiv="refresh"');
     expect(ready.html).toContain("Only 1 company like this was proved. The list is thin: read it as a start.");
     expect(ready.html).toContain("What TinySet was asked");
+    expect(ready.html).not.toContain("None of these companies");
+    // No proved company in the founder's country: the page says so above the list.
+    await env.DB.prepare("UPDATE companies SET country = 'Germany' WHERE search_id = ?").bind(id).run();
+    const elsewhere = await page(`/searches/${id}`);
+    expect(elsewhere.html).toContain("None of these companies is in the United Kingdom. This list shows who funds companies like this elsewhere.");
     await env.DB.prepare("UPDATE searches SET state = 'failed', failed_reason = 'run_failed' WHERE id = ?").bind(id).run();
     const failed = await page(`/searches/${id}`);
     expect(failed.html).toContain("This search did not finish: TinySet stopped early and too few companies were proved. Nothing was ranked.");

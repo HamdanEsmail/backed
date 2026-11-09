@@ -7,6 +7,7 @@ import {
   matcherFor,
   nameHits,
   nameKey,
+  nameWords,
   prepareSentence,
   splitNames,
   startsSentence,
@@ -25,7 +26,8 @@ export type SetApartReason =
   | "no_investors_listed"
   | "unreadable"
   | "company_not_named"
-  | "no_investor_named";
+  | "no_investor_named"
+  | "prize_not_round";
 
 export type CheckedInvestor = {
   name: string;
@@ -37,7 +39,15 @@ export type CheckedInvestor = {
 };
 
 export type ProofResult =
-  | { status: "proved"; stage: Stage; investors: CheckedInvestor[]; partner: string | null; founders: string[] }
+  | {
+      status: "proved";
+      stage: Stage;
+      investors: CheckedInvestor[];
+      partner: string | null;
+      /** The keys of the leads the partner belongs to. */
+      partnerLeads: string[];
+      founders: string[];
+    }
   | { status: "set_apart"; reason: SetApartReason; investors: CheckedInvestor[] };
 
 /** The investors a row lists, leads first, generic entries dropped, each name once. */
@@ -282,13 +292,56 @@ export function checkCompany(
   const company = matcherFor(f.name);
   if (!companyNamed(sentences, company)) return { status: "set_apart", reason: "company_not_named", investors: unnamed(f) };
 
-  const investors: CheckedInvestor[] = listedInvestors(f).map((i) => {
-    const quote = quoteFor(sentences, i.name, company);
-    return { ...i, named: quote !== null, quote };
-  });
+  const found = splitFirms(listedInvestors(f), sentences).map((i) => ({ i, at: findInPage(sentences, matcherFor(i.name), company) }));
+  const investors: CheckedInvestor[] = found.map(({ i, at }) => ({
+    ...i,
+    named: at !== null,
+    quote: at === null ? null : cutQuote(at.sentence, at.start, at.end),
+  }));
   if (!investors.some((i) => i.named)) return { status: "set_apart", reason: "no_investor_named", investors };
+  // Money won in a competition, an award or a grant is not a round, whoever gave it.
+  if (found.every(({ at }) => at === null || PRIZE.test(at.sentence.replace(AWARD_WINNING, "")))) {
+    return { status: "set_apart", reason: "prize_not_round", investors };
+  }
 
-  const partner = f.leadPartner !== null && findInPage(sentences, matcherFor(f.leadPartner)) !== null ? f.leadPartner : null;
+  const partnerMatch = f.leadPartner === null ? null : matcherFor(f.leadPartner);
+  const partner = partnerMatch !== null && findInPage(sentences, partnerMatch) !== null ? f.leadPartner : null;
   const founders = splitNames(f.founders).filter((n) => findInPage(sentences, matcherFor(n)) !== null);
-  return { status: "proved", stage: stageOfRound(f.roundType)!, investors, partner, founders };
+  return { status: "proved", stage: stageOfRound(f.roundType)!, investors, partner, partnerLeads: partnerLeads(investors, partnerMatch, sentences), founders };
+}
+
+/** Words that make money a prize, not an investment: a competition, an award, a pitch win, a grant. */
+const PRIZE = /\b(?:prizes?|competitions?|awards?|awarded|winners?|grants?|hackathons?|pitch (?:competition|contest|battle|night|event|day)s?)\b/i;
+/** "an award-winning startup" says nothing about this money. */
+const AWARD_WINNING = /\baward[- ]winning\b/gi;
+
+/**
+ * A cell entry such as "Caret Capital & Indigram Labs" is two firms when the page names each on its
+ * own and never the pair as one name. Each part must be a name of two words or more, so "Wexley & Co"
+ * stays whole.
+ */
+function splitFirms<T extends { name: string; key: string }>(listed: T[], sentences: Sentence[]): T[] {
+  const named = (name: string) => findInPage(sentences, matcherFor(name)) !== null;
+  return listed.flatMap((i) => {
+    const parts = i.name.split(/\s+&\s+/);
+    if (parts.length < 2 || named(i.name)) return [i];
+    if (!parts.every((p) => nameWords(p).length >= 2 && named(p))) return [i];
+    return parts.map((p) => ({ ...i, name: p.trim(), key: nameKey(p) }));
+  });
+}
+
+/**
+ * The leads a partner belongs to. With one lead named, that lead. With two or more, the leads named
+ * in a sentence that also names the partner, and none when no sentence gives the partner to one.
+ */
+function partnerLeads(investors: CheckedInvestor[], partner: NameMatcher | null, sentences: Sentence[]): string[] {
+  const leads = investors.filter((i) => i.role === "lead" && i.named);
+  if (partner === null || leads.length <= 1) return leads.map((i) => i.key);
+  const withPartner = sentences.filter((s) => nameHits(s, partner).length > 0);
+  return leads
+    .filter((l) => {
+      const m = matcherFor(l.name);
+      return m !== null && withPartner.some((s) => nameHits(s, m).length > 0);
+    })
+    .map((l) => l.key);
 }

@@ -67,6 +67,7 @@ export type CompanyRow = {
   page_url: string | null;
   read_at: string | null;
   partner_named: string | null;
+  partner_leads_json: string | null;
   founders_named_json: string | null;
   found_at: string;
   updated_at: string;
@@ -231,7 +232,7 @@ export async function saveCheck(
     db
       .prepare(
         `UPDATE companies SET state = ?4, set_apart_reason = ?5, page_url = ?6, read_at = ?7, partner_named = ?8,
-           founders_named_json = ?9, updated_at = ?10
+           founders_named_json = ?9, updated_at = ?10, partner_leads_json = ?11
          WHERE id = ?1 AND claimed_at = ?2 AND check_key = ?3 AND state = 'checking'`,
       )
       .bind(
@@ -245,6 +246,7 @@ export async function saveCheck(
         proved ? result.partner : null,
         proved ? JSON.stringify(result.founders) : null,
         now.toISOString(),
+        proved && result.partner !== null ? JSON.stringify(result.partnerLeads) : null,
       ),
     db.prepare(`DELETE FROM company_investors WHERE company_id = ?1 AND ${guard}`).bind(claimed.id, claimed.claimed_at, claimed.check_key),
   ];
