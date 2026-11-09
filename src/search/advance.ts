@@ -356,6 +356,39 @@ const rankStage = (c: CompanyRow) => stageOfRound(c.round_type)!;
 /** Scores the investors and stores the order and every part, once: the batch ends by setting
  *  `ranked_at`, and two at once write the same rows. */
 async function rankSearch(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
+  const { statements, ranked } = await rankingStatements(env, s, now);
+  statements.push(
+    env.DB.prepare("UPDATE searches SET ranked_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NULL").bind(now.toISOString(), s.id),
+  );
+  const results = await env.DB.batch(statements);
+  if ((results[results.length - 1]?.meta.changes ?? 0) === 1) did.push(`ranked:${ranked}`);
+}
+
+/**
+ * Ranks a ready search again in place, after a watch added a company: the same score, the same
+ * rows, and the page stays ready throughout. Then the way in for any investor new to the top, as
+ * far as the time allows; the cron looks up the rest. Returns how many investors are ranked.
+ */
+export async function rankAgain(env: Env, searchId: string, now: Date = new Date()): Promise<number> {
+  const startedMs = Date.now();
+  const s = await getSearch(env.DB, searchId);
+  if (s === null || s.state !== "ready") return 0;
+  const { statements, ranked } = await rankingStatements(env, s, now);
+  statements.push(env.DB.prepare("UPDATE searches SET ranked_at = ? WHERE id = ? AND state = 'ready'").bind(now.toISOString(), s.id));
+  await env.DB.batch(statements);
+  await lookUpTop(env, s, now, startedMs, []);
+  return ranked;
+}
+
+/** The way in for a ready search's top investors still to look up, within the time budget. */
+export async function lookUpWaysInLater(env: Env, searchId: string, now: Date = new Date()): Promise<void> {
+  const s = await getSearch(env.DB, searchId);
+  if (s !== null && s.state === "ready") await lookUpTop(env, s, now, Date.now(), []);
+}
+
+/** The statements that store a search's ranking, without the last one that marks it ranked, and
+ *  how many investors it ranks. */
+async function rankingStatements(env: Env, s: SearchRow, now: Date): Promise<{ statements: D1PreparedStatement[]; ranked: number }> {
   const ranked = rank(await rankInput(env.DB, s.id), { stage: s.stage, country: s.country }, now);
   const statements: D1PreparedStatement[] = [
     env.DB.prepare("DELETE FROM ranking WHERE search_id = ?").bind(s.id),
@@ -379,11 +412,7 @@ async function rankSearch(env: Env, s: SearchRow, now: Date, did: string[]): Pro
       );
     }
   }
-  statements.push(
-    env.DB.prepare("UPDATE searches SET ranked_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NULL").bind(now.toISOString(), s.id),
-  );
-  const results = await env.DB.batch(statements);
-  if ((results[results.length - 1]?.meta.changes ?? 0) === 1) did.push(`ranked:${ranked.length}`);
+  return { statements, ranked: ranked.length };
 }
 
 /** The top investors whose way in is not looked up (or is older than the reuse window). */
@@ -405,6 +434,15 @@ async function waysInToDo(env: Env, s: SearchRow, now: Date): Promise<{ investor
  * left to do, the search is ready.
  */
 async function waysIn(env: Env, s: SearchRow, now: Date, startedMs: number, did: string[]): Promise<void> {
+  if (!(await lookUpTop(env, s, now, startedMs, did))) return;
+  const r = await env.DB.prepare("UPDATE searches SET state = 'ready', finished_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NOT NULL")
+    .bind(now.toISOString(), s.id)
+    .run();
+  if (r.meta.changes === 1) did.push("ready");
+}
+
+/** Looks up the way in for the top investors still to do, a few per call. True when none is left. */
+async function lookUpTop(env: Env, s: SearchRow, now: Date, startedMs: number, did: string[]): Promise<boolean> {
   const todo = await waysInToDo(env, s, now);
   if (todo.length > 0) {
     await env.DB.batch(
@@ -418,18 +456,15 @@ async function waysIn(env: Env, s: SearchRow, now: Date, startedMs: number, did:
     const staleBefore = new Date(now.getTime() - CHECK_CLAIM_STALE_MINUTES * 60_000).toISOString();
     let looked = 0;
     for (const t of todo) {
-      if (looked >= WAY_INS_PER_ADVANCE || Date.now() - startedMs >= ADVANCE_BUDGET_MS) return;
+      if (looked >= WAY_INS_PER_ADVANCE || Date.now() - startedMs >= ADVANCE_BUDGET_MS) return false;
       if (await lookUpInvestor(env, t.investor_key, t.site_hint, now, staleBefore)) {
         looked++;
         did.push(`way_in:${t.investor_key}`);
       }
     }
-    if ((await waysInToDo(env, s, now)).length > 0) return;
+    if ((await waysInToDo(env, s, now)).length > 0) return false;
   }
-  const r = await env.DB.prepare("UPDATE searches SET state = 'ready', finished_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NOT NULL")
-    .bind(now.toISOString(), s.id)
-    .run();
-  if (r.meta.changes === 1) did.push("ready");
+  return true;
 }
 
 // --- the whole step ------------------------------------------------------------------------------

@@ -105,6 +105,43 @@ ranked again in place.
 - **"A & B" in a lead cell is two firms** when the page names each on its own and never the pair as one name.
   Each part must be two words or more, so "Wexley & Co" stays whole.
 
+### Watching a saved search (Task 7)
+
+**The free look.** The plan asked whether TinySearch for each demo line ("<key words> raises seed funding")
+returns funding announcements. Five free searches on 9 November, ten results each:
+
+| Line | Query | What came back |
+|---|---|---|
+| Restaurant | restaurant food waste software raises seed funding | 8 of 10 are funding announcements (Phood, ClearCOGS twice, Orbisk, Flowaste, Afresh twice, Freshflow), but nearly all from 2018 to 2022; only ClearCOGS (April 2025) is near the window |
+| Kenya | cold storage smallholder farmers raises seed funding | 2 of 10, both SokoFresh money from UNCDF; the rest are USDA grant pages, agency articles and research papers. The pre-seed form of the query with "Kenya" was worse |
+| UAE | Arabic AI tutor raises seed funding | 7 of 10 are announcements, several recent (Aristotle, September 2026; Astral, the same day; Nanovate, October 2025; Edumentors; Medly). A second form without "Arabic" gave the same names |
+
+Two of three lines pass, so the watch was built. Read through the watch's own reader and the proof check (free
+Fetch reads), the real pages give: restaurant, nothing in the window; Kenya, nothing proved (SokoFresh has no
+round stage); UAE, two companies proved, Astral (MapleVC) and Aristotle (True Ventures, Wicklow Capital).
+
+**How it was built.**
+
+- **A page is read as a row's facts, then checked like a row.** A Monitor result is an address and a headline,
+  while the proof check needs the facts a TinySet row gives. `src/watch/announcement.ts` reads them from the page
+  without a model: the company is the headline's subject before "raises", "secures" and the like (words that
+  describe it, "Cairo AI startup", are dropped), and it must be named in a funding sentence of the body;
+  investors come only from "led by …" and "participation from …" in funding sentences that name the company or
+  follow one about "the round"; the round, the dollar sum and the date are read where they are written plainly.
+  Anything unclear is left out, and the proof check then refuses the page. A headline that leads with the
+  investor ("X leads $8m round in Y") names no company and adds nothing.
+- **Only a proved company is written.** A page that is not an announcement, or that the check refuses (a grant,
+  no date, no investor named), leaves no company, only its line in `watch_hits` with the reason.
+- **"Angel investors from A, B" in a page drops the employers**, as in a TinySet cell. The first read of the real
+  Aristotle page made OpenAI, Sierra, Ramp and Cognition investors; fixed and tested before anything shipped.
+- **A watched search is ranked again in place.** Its page stays ready throughout (no running view on a demo
+  page); the way in for an investor new to the top ten is looked up then, or by the next minute's cron.
+- **Each Monitor run is booked once at $0.005**, a run delivered twice changes nothing, and a result is read once
+  per search. The cron deletes a watch's Monitor after its last day, and every watch's Monitor once the spend stop
+  is reached. Backed deletes only the Monitor ids it stored; it never lists, pauses or edits any other.
+- **Migration `0007`**: `watches`, `watch_runs`, `watch_hits`. The search's page says "New since <date>" with the
+  companies the watch added, and marks each one "Found by the watch" in the list of companies.
+
 ## What the two paid demo searches got wrong
 
 Neither is thin. These are the faults I found reading them, most visible first, and what became of each. Each

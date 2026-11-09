@@ -23,7 +23,7 @@ grep -m1 '^WEBHOOK_SECRET=' .dev.vars | cut -d= -f2- | tr -d '\r\n' | npx wrangl
 ## First deploy
 
 1. `npx wrangler d1 create backed`, then put the `database_id` it prints into `wrangler.jsonc`.
-2. `npm run migrate:remote` (applies `migrations/0001` to `0006`).
+2. `npm run migrate:remote` (applies `migrations/0001` to `0007`).
 3. `npm run check`, then `npx wrangler deploy` with `SITE_ENABLED` `"0"` in `wrangler.jsonc`: the API answers, every
    page path answers the JSON 404.
 4. Set the three secrets (above).
@@ -59,6 +59,28 @@ paid ones are still held to the spend stop.
 Each search moves on by itself (the cron runs `advance` every minute); `GET /api/searches/:id` shows its state.
 A run takes 5 to 20 minutes, then the checks and the way in a few minutes more. Its cost is booked from the
 wallet when the run ends (`GET /api/stats`, `tinyfish.tinyset.usd`).
+
+## Watching the demo searches
+
+A watch is one TinyFish Topic Monitor per demo search that runs "<key words> raises seed funding" at 06:00 and
+18:00 UTC and calls `/hooks/monitor/<WEBHOOK_SECRET>`. Each new result is read with Fetch, read as one company's
+facts and put through the same proof check; only a proved company is added, and the search is ranked again in
+place. At most 3 watches; demo searches only; each Monitor run is booked at $0.005 (creating one runs it once).
+The cron deletes a watch's Monitor after its `until` day, or every watch's Monitor once the spend stop is
+reached. Backed deletes only the Monitor ids stored in `watches`; it never lists, pauses or edits others.
+
+`npm run migrate:remote` first (it applies `0007_watch.sql`), then, with `until` the last day:
+
+```bash
+curl -X POST "$BASE/api/admin/searches/z9l0kxasj2em/watch" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' \
+  -d '{"key_words":"restaurant food waste software","until":"2026-11-17"}'
+curl -X POST "$BASE/api/admin/searches/8nv424ha5tmn/watch" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' \
+  -d '{"key_words":"cold storage smallholder farmers","until":"2026-11-17"}'
+curl -X POST "$BASE/api/admin/searches/t8mcb97ubdl8/watch" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' \
+  -d '{"key_words":"Arabic AI tutor","until":"2026-11-17"}'
+```
+
+`DELETE` on the same address stops one at once. What each run found: `SELECT url, state, reason FROM watch_hits`.
 
 ## Switching the site on
 

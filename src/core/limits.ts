@@ -56,6 +56,21 @@ export const INVESTOR_REUSE_DAYS = 30;
  *  in all before it is stored as it stands. */
 export const WAY_IN_ATTEMPTS = 3;
 
+// --- Watching a saved search ---------------------------------------------------------------------
+
+/** Searches watched at once, at most: the three demo searches. */
+export const MAX_WATCHES = 3;
+/** A watch runs at most this many days. */
+export const WATCH_MAX_DAYS = 14;
+/** When a watch's Monitor runs: twice a day, at 06:00 and 18:00 UTC. */
+export const WATCH_SCHEDULE_CRON = "0 6,18 * * *";
+/** A Monitor result counts as new when the search engine dates it within this many minutes. */
+export const WATCH_RECENCY_MINUTES = 1440;
+/** Results a Monitor run keeps. */
+export const WATCH_RESULTS_PER_RUN = 5;
+/** New results read per webhook call or cron minute, at most. */
+export const WATCH_READS_PER_CALL = 3;
+
 // --- Keeping and reusing -------------------------------------------------------------------------
 
 /** The same line, stage and country within this many days opens the stored search. */

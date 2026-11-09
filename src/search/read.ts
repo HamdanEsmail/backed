@@ -87,7 +87,13 @@ export type CompanyView = {
   partner: string | null;
   founders: string[];
   named_investors: { name: string; role: string; quote: string | null }[];
+  /** "tinyset", or "watch" for a company a watch found after the search was ready. */
+  found_by: string;
+  found_at: string;
 };
+
+/** A watched search's watch: since when, until when, and whether it still runs. */
+export type WatchView = { since: string; until: string; active: boolean; query: string; last_run_at: string | null };
 
 export type SearchView = {
   search: {
@@ -109,6 +115,7 @@ export type SearchView = {
     /** The sentence the page shows for the search's state, when it has one. */
     notice: string | null;
     none_in_country: boolean;
+    watch: WatchView | null;
   };
   figures: { found: number; proved: number; set_apart: number; checking: number; investors: number };
   investors: InvestorView[];
@@ -129,7 +136,7 @@ function partnerOf(c: CompanyRow, investorKey: string): string | null {
 export async function readSearch(db: D1Database, id: string): Promise<SearchView | null> {
   const s = await getSearch(db, id);
   if (s === null) return null;
-  const [companiesRes, investorsRes, rankingRes, lookupsRes] = await db.batch([
+  const [companiesRes, investorsRes, rankingRes, lookupsRes, watchRes] = await db.batch([
     db.prepare("SELECT * FROM companies WHERE search_id = ? AND removed = 0 ORDER BY announced_on DESC, name").bind(id),
     db.prepare("SELECT * FROM company_investors WHERE search_id = ?").bind(id),
     db.prepare("SELECT * FROM ranking WHERE search_id = ? ORDER BY position").bind(id),
@@ -138,7 +145,9 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
         "SELECT i.* FROM investors i JOIN ranking r ON r.investor_key = i.investor_key WHERE r.search_id = ? AND r.position <= ? AND i.state = 'done'",
       )
       .bind(id, WAY_IN_TOP),
+    db.prepare("SELECT created_at, until, ended_at, query, last_run_at FROM watches WHERE search_id = ?").bind(id),
   ]);
+  const w = (watchRes?.results ?? [])[0] as { created_at: string; until: string; ended_at: string | null; query: string; last_run_at: string | null } | undefined;
   const lookups = new Map(((lookupsRes?.results ?? []) as InvestorLookupRow[]).map((l) => [l.investor_key, l]));
   const companies = (companiesRes?.results ?? []) as CompanyRow[];
   const links = (investorsRes?.results ?? []) as CompanyInvestorRow[];
@@ -168,6 +177,8 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
       c.state === "proved"
         ? links.filter((l) => l.company_id === c.id && l.named === 1).map((l) => ({ name: l.name, role: l.role, quote: l.quote }))
         : [],
+    found_by: c.source,
+    found_at: c.found_at,
   }));
 
   const investors: InvestorView[] = ranking.map((r) => {
@@ -264,6 +275,7 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
       notice,
       // True when the list is ready and no proved company is in the founder's country.
       none_in_country: s.state === "ready" && figures.proved > 0 && !companies.some((c) => c.state === "proved" && inCountry(c.country, s.country)),
+      watch: w === undefined ? null : { since: w.created_at, until: w.until, active: w.ended_at === null, query: w.query, last_run_at: w.last_run_at },
     },
     figures,
     investors,

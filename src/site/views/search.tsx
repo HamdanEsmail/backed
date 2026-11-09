@@ -9,7 +9,7 @@ import { monthYear } from "../../search/spec";
 import { SET_APART } from "../../search/words";
 import { FirstSheet, Names, Others } from "../components";
 import { Footer, Layout, Nav } from "../layout";
-import { place } from "../format";
+import { place, shortDate } from "../format";
 
 /** A running page reloads itself this often, in seconds. */
 export const REFRESH_SECONDS = 5;
@@ -139,6 +139,7 @@ function Ready(props: { view: SearchView }) {
   return (
     <section class="block lead-in ranked-end" id="list">
       {view.search.notice !== null ? <p class="note">{view.search.notice}</p> : null}
+      <WatchNote view={view} />
       {view.search.none_in_country ? (
         <p class="said elsewhere">
           None of these companies is in {place(view.search.country)}. This list shows who funds companies like this elsewhere.
@@ -164,6 +165,29 @@ function Ready(props: { view: SearchView }) {
         </>
       )}
     </section>
+  );
+}
+
+/** "New since <date>": the companies a watch found and the proof check proved, or that it is still
+ *  watching and nothing new is proved. Nothing for a search that was never watched. */
+function WatchNote(props: { view: SearchView }) {
+  const w = props.view.search.watch;
+  if (w === null) return null;
+  const found = props.view.companies.filter((c) => c.found_by === "watch" && c.state === "proved");
+  if (found.length > 0) {
+    return (
+      <p class="note">
+        New since {shortDate(w.since)}: {found.map((c) => c.name).join(", ")}, found by the watch and proved by{" "}
+        {found.length === 1 ? "its announcement" : "their announcements"}.
+      </p>
+    );
+  }
+  return (
+    <p class="note">
+      {w.active
+        ? `Watched for new rounds since ${shortDate(w.since)}, until ${shortDate(w.until)}. Nothing new is proved yet.`
+        : `Watched for new rounds from ${shortDate(w.since)} to ${shortDate(w.until)}. Nothing new was proved.`}
+    </p>
   );
 }
 

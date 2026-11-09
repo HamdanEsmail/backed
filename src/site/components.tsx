@@ -259,7 +259,10 @@ export function Names(props: { companies: CompanyView[]; title: string; id?: str
         <p class="kind">Proved by its announcement</p>
         {proved.length === 0 ? <p class="empty">None yet.</p> : null}
         {proved.map((c) => (
-          <p>{c.page_url !== null || c.announcement_url !== null ? <a href={(c.page_url ?? c.announcement_url)!}>{c.name}</a> : c.name}</p>
+          <p>
+            {c.page_url !== null || c.announcement_url !== null ? <a href={(c.page_url ?? c.announcement_url)!}>{c.name}</a> : c.name}
+            {c.found_by === "watch" ? <small>Found by the watch</small> : null}
+          </p>
         ))}
         {apart.length > 0 ? <p class="kind second">Set apart, not counted</p> : null}
         {apart.map((c) => (

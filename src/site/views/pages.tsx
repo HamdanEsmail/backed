@@ -184,7 +184,8 @@ export function ApiPage(props: { base: string; sampleId: string | null; saved: n
         </Endpoint>
         <p>
           A search's page also downloads as <code>/searches/:id.json</code> and <code>/searches/:id.csv</code>. Admin routes (a token) start searches
-          outside the public limits and adopt a dataset TinySet already filled.
+          outside the public limits, adopt a dataset TinySet already filled, and watch a demo search for new rounds with a TinyFish Monitor
+          (<code>POST</code> and <code>DELETE /api/admin/searches/:id/watch</code>).
         </p>
       </div>
     </Plain>
@@ -201,6 +202,11 @@ export function AboutPage(props: { stats: Stats; saved: number }) {
     ["TinySet", `Finds ${TARGET_ROWS} companies like yours that raised in the last ${WINDOW_MONTHS} months, with round, investors, partner, founders and link.`, `${plural(t.tinyset.calls, "call")}, ${plural(t.tinyset.runs, "run")}, ${usd(t.tinyset.usd)}`],
     ["Fetch", "Reads every announcement for the proof, and an investor's own site for the way in.", `${plural(t.fetch.calls, "read")}, ${usd(t.fetch.usd)}`],
     ["Search", "Finds an investor's own site when the row gives none.", `${plural(t.search.calls, "search", "searches")}, ${usd(t.search.usd)}`],
+    [
+      "Monitor",
+      "Watches the demo searches twice a day for new rounds. A new page is added only when the same proof check proves it.",
+      `${plural(t.monitor.calls, "check")}, ${usd(t.monitor.usd)}`,
+    ],
   ];
   return (
     <Plain
