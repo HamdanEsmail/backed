@@ -16,7 +16,7 @@ import { longDate, monthYear } from "./spec";
 
 /** Sites that are about investors, not theirs: a search result there is never "their site". */
 const NOT_THEIR_SITE =
-  /(^|\.)(crunchbase|linkedin|pitchbook|wikipedia|twitter|x|facebook|instagram|youtube|medium|techcrunch|bloomberg|forbes|reuters|cbinsights|tracxn|dealroom|wellfound|angel|signal\.nfx|f6s|golden|zoominfo|owler|craft|glassdoor|github|substack|businesswire|prnewswire|globenewswire|eu-startups|tech|sifted|venturebeat|axios|wsj|ft|nytimes|preqin|startuplist|openvc|gust|magnitt|wamda|techcabal|disrupt-africa|weetracker|theorg|rocketreach|apollo|vcsheet|seedtable|pehub|globalventuring|privateequityinternational|businessinsider|yahoo)\.[a-z.]+$/i;
+  /(^|\.)(crunchbase|linkedin|pitchbook|wikipedia|twitter|x|facebook|instagram|youtube|medium|techcrunch|bloomberg|forbes|reuters|cbinsights|tracxn|dealroom|wellfound|angel|signal\.nfx|f6s|golden|zoominfo|owler|craft|glassdoor|github|substack|businesswire|prnewswire|globenewswire|eu-startups|tech|sifted|venturebeat|axios|wsj|ft|nytimes|preqin|startuplist|openvc|gust|magnitt|wamda|techcabal|disrupt-africa|weetracker|theorg|rocketreach|apollo|vcsheet|seedtable|pehub|globalventuring|privateequityinternational|businessinsider|yahoo|devex|impactalpha|agfundernews|techeconomy|thestartupscene|entrackr|inc42|yourstory)\.[a-z.]+$/i;
 
 /** The part of a host name that names the organisation: "www.copperline.vc" -> "copperline.vc",
  *  "news.bbc.co.uk" -> "bbc.co.uk". */
@@ -34,14 +34,16 @@ export function siteBase(url: string): string | null {
 }
 
 /**
- * Their site, from search results: the first result whose title names the investor as a whole
- * name, or whose domain carries the name, on a site that is not a database, a social network or the
- * press. Its home page is the site.
+ * Their site, from search results, on a site that is not a database, a social network or the press:
+ * the first result whose domain carries the name, else the first whose title names the investor as
+ * a whole name. A title alone is weaker: news and data sites put the name in their titles too. Its
+ * home page is the site.
  */
 export function pickSite(hits: SearchHit[], name: string): string | null {
   const m = matcherFor(name);
   if (m === null) return null;
   const compact = nameWords(name).join("");
+  let byTitleOnly: string | null = null;
   for (const hit of hits) {
     let u: URL;
     try {
@@ -55,9 +57,10 @@ export function pickSite(hits: SearchHit[], name: string): string | null {
     const label = base.split(".")[0]!.replace(/[^a-z0-9]/g, "");
     const byDomain = compact.length >= 3 && (label.includes(compact) || (label.length >= 4 && compact.startsWith(label)));
     const byTitle = nameHits(prepareSentence(hit.title), m).length > 0;
-    if (byDomain || byTitle) return `${u.protocol}//${u.host}/`;
+    if (byDomain) return `${u.protocol}//${u.host}/`;
+    if (byTitle) byTitleOnly ??= `${u.protocol}//${u.host}/`;
   }
-  return null;
+  return byTitleOnly;
 }
 
 // --- An open door --------------------------------------------------------------------------------
