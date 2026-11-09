@@ -3,7 +3,7 @@
 // route through the founders and the partner the announcements named, and a first line for the
 // founder's email built from proved facts. The parsing is pure; `lookUpInvestor` does the reads.
 import { INVESTOR_REUSE_DAYS, WAY_IN_ATTEMPTS } from "../core/limits";
-import { matcherFor, nameHits, nameWords, prepareSentence } from "../core/names";
+import { matcherFor, nameHits, nameWords, prepareSentence, startsSentence } from "../core/names";
 import { stageInText, type Stage } from "../core/stages";
 import type { Env } from "../env";
 import { TinyFishError } from "../tinyfish/client";
@@ -35,9 +35,9 @@ export function siteBase(url: string): string | null {
 
 /**
  * Their site, from search results, on a site that is not a database, a social network or the press:
- * the first result whose domain carries the name, else the first whose title names the investor as
- * a whole name. A title alone is weaker: news and data sites put the name in their titles too. Its
- * home page is the site.
+ * the first result whose domain carries the name, else the first whose title starts with the
+ * investor's whole name. A title alone is weaker: news and data sites put the name in their titles
+ * too. Its home page is the site.
  */
 export function pickSite(hits: SearchHit[], name: string): string | null {
   const m = matcherFor(name);
@@ -56,7 +56,10 @@ export function pickSite(hits: SearchHit[], name: string): string | null {
     if (NOT_THEIR_SITE.test(base)) continue;
     const label = base.split(".")[0]!.replace(/[^a-z0-9]/g, "");
     const byDomain = compact.length >= 3 && (label.includes(compact) || (label.length >= 4 && compact.startsWith(label)));
-    const byTitle = nameHits(prepareSentence(hit.title), m).length > 0;
+    // A title counts when it starts with the name, as a site's own pages do ("Copperline Ventures:
+    // seed fund"); a news or partner page names them further in.
+    const title = prepareSentence(hit.title);
+    const byTitle = nameHits(title, m).some((h) => startsSentence(title, h));
     if (byDomain) return `${u.protocol}//${u.host}/`;
     if (byTitle) byTitleOnly ??= `${u.protocol}//${u.host}/`;
   }
