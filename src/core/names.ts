@@ -190,10 +190,18 @@ function buildMatcher(name: string): NameMatcher | null {
     words,
     oneWord: words.length === 1,
     needsCapital: /\p{Lu}/u.test(name),
-    // Words may also run together: pages write "DayOne Capital" for Day One Capital.
-    pattern: new RegExp(`(?<![\\p{L}\\p{N}])${words.map(escapeRe).join("[^\\p{L}\\p{N}]*")}(?![\\p{L}\\p{N}])`, "giu"),
+    // Words may also run together: pages write "DayOne Capital" for Day One Capital. No Unicode
+    // classes in it: compiling one per name cost a cold isolate hundreds of milliseconds. The
+    // letters on either side of a match are checked in nameHits instead.
+    pattern: new RegExp(words.map(escapeRe).join(SEPARATOR), "gi"),
   };
 }
+
+/** What may stand between a name's words: spaces and punctuation, ASCII and the common others. */
+const SEPARATOR = "[\\x00-\\x2F\\x3A-\\x40\\x5B-\\x60\\x7B-\\x7F\\u00A0\\u00B7\\u2010-\\u2015\\u2018-\\u201F\\u2026]*";
+/** A letter or a digit in any script: a name counts only where none touches it. */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+const touches = (text: string, at: number): boolean => at >= 0 && at < text.length && WORD_CHAR.test(text[at]!);
 
 export type Hit = { start: number; end: number };
 
@@ -206,9 +214,15 @@ export type Hit = { start: number; end: number };
 export function nameHits(sentence: Sentence, m: NameMatcher): Hit[] {
   const hits: Hit[] = [];
   m.pattern.lastIndex = 0;
-  for (let hit = m.pattern.exec(sentence.folded); hit !== null; hit = m.pattern.exec(sentence.folded)) {
+  const text = sentence.folded;
+  for (let hit = m.pattern.exec(text); hit !== null; hit = m.pattern.exec(text)) {
+    const end = hit.index + hit[0].length;
+    if (touches(text, hit.index - 1) || touches(text, end)) {
+      m.pattern.lastIndex = hit.index + 1;
+      continue;
+    }
     if (m.oneWord && m.needsCapital && !/\p{Lu}/u.test(hit[0])) continue;
-    hits.push({ start: hit.index, end: hit.index + hit[0].length });
+    hits.push({ start: hit.index, end });
   }
   return hits;
 }
