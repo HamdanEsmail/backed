@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "backed",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "backed",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Every minute: move each unfinished search forward, so a search finishes when nobody watches it.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "PUBLIC_BASE_URL": "https://backed.hamdanesmail12-7a9.workers.dev",
+    // The site's screens answer only when this is "1". Off, every site path answers 404 and the
+    // API keeps working. Set to "1" to put the site live.
+    "SITE_ENABLED": "0"
+  },
+  // Styles and icons, served before the Worker runs. No .html file lives here.
+  "assets": { "directory": "./public" },
+  "preview_urls": true,
+  "observability": {
+    "enabled": true
+  }
+}
