@@ -23,7 +23,7 @@ grep -m1 '^WEBHOOK_SECRET=' .dev.vars | cut -d= -f2- | tr -d '\r\n' | npx wrangl
 ## First deploy
 
 1. `npx wrangler d1 create backed`, then put the `database_id` it prints into `wrangler.jsonc`.
-2. `npm run migrate:remote` (applies `migrations/0001` to `0005`).
+2. `npm run migrate:remote` (applies `migrations/0001` to `0006`).
 3. `npm run check`, then `npx wrangler deploy` with `SITE_ENABLED` `"0"` in `wrangler.jsonc`: the API answers, every
    page path answers the JSON 404.
 4. Set the three secrets (above).

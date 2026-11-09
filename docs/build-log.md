@@ -95,40 +95,56 @@ ranked again in place.
 - **Name patterns are built without Unicode classes.** Compiling one `\p{L}` pattern per investor cost a new
   isolate up to 400 ms of CPU on the home; the letters either side of a match are now checked with one shared
   pattern. The home's median fell from 169 ms to 31 ms.
+- **A prize is not a round.** When every sentence that names a company's investors is about a prize, a
+  competition, an award, a pitch win or a grant, the company is set apart: "a prize, an award or a grant, not an
+  investment round". "An award-winning startup raised…" still counts.
+- **When no proved company is in the founder's country, the search page says so** above the list: "None of these
+  companies is in the United Arab Emirates. This list shows who funds companies like this elsewhere."
+- **A partner belongs to the lead named beside them.** With two leads, the partner is shown on the lead its
+  sentence names, and on none when no sentence gives the partner to one (`companies.partner_leads_json`).
+- **"A & B" in a lead cell is two firms** when the page names each on its own and never the pair as one name.
+  Each part must be two words or more, so "Wexley & Co" stays whole.
 
 ## What the two paid demo searches got wrong
 
-Neither is thin: each proved 22 companies. These are the faults I found reading them, most visible first, and
-what became of each.
+Neither is thin. These are the faults I found reading them, most visible first, and what became of each. Each
+search was checked again twice from its stored rows; the figures moved a little between reads, because a page
+that timed out once may answer the next time, and the other way round.
 
-**Cold storage, Kenya, pre-seed** (27 found, 22 proved, 5 set apart; 68 investors, 69 after the fixes):
+**Cold storage, Kenya, pre-seed.** First run: 27 found, 22 proved, 5 set apart, 68 investors. Now: 22 proved
+(one set apart as a prize, one announcement read that could not be read before), 71 investors.
 
 1. *Fixed.* The second investor, Mercy Corps Ventures, was given Preqin's site, so its "open form" was Preqin's
    contact page. It now says no site of its own was found.
-2. *Left.* The third, Corton Investments, is there for a $25,000 prize offered to a competition winner, read as a
-   led seed round. The row and the sentence say so; telling a prize from a round would need a rule I do not trust.
-3. *Left.* Only three companies are in Kenya, and fewer than half store or cool produce. TinySet also returned
+2. *Fixed.* The third, Corton Investments, was there for a $25,000 prize offered to a competition winner, read as
+   a led seed round. That company is now set apart as a prize, and Corton is off the list.
+3. *Fixed.* One partner was given to both co-leads of Solgram's round; it is now shown on DSG Consumer Partners
+   only, the firm its sentence names.
+4. *Left.* Only three companies are in Kenya, and fewer than half store or cool produce. TinySet also returned
    frost spray, vertical farming, grocery ordering and two food-waste marketplaces. The country adds one point and
    is not a filter, by design, but the list reads wider than the line.
-4. *Left.* One partner is given to both co-leads of the same round (the row has one partner field per company).
-5. *Left.* "Caret Capital & Indigram Labs" is one name: an ampersand does not split a cell, because firm names use
-   it too.
+5. *Left.* "Caret Capital & Indigram Labs" is still one name: its page never names the two firms apart.
+6. *Left.* World Fund is now second, through Barocal (refrigerant-free cooling, Cambridge), whose announcement
+   could not be read the first time.
 
-**Arabic AI tutor, United Arab Emirates, seed** (29 found, 22 proved, 7 set apart; 79 investors, 72 after the fixes):
+**Arabic AI tutor, United Arab Emirates, seed.** First run: 29 found, 22 proved, 7 set apart, 79 investors. Now:
+24 proved, 5 set apart, 79 investors (the seven wrong names gone, three eu-startups.com pages read this time).
 
-1. *Left.* No company teaches in Arabic and none is in the UAE; the nearest are two in Egypt. It is a good list for
-   "an AI tutor for school students" and says nothing about the Arabic half of the line. That is what TinySet
-   found; Backed does not add companies of its own.
+1. *Said on the page.* No company teaches in Arabic and none is in the UAE; the nearest are in Egypt. The page now
+   says that none is in the United Arab Emirates and that the list shows who funds companies like this elsewhere.
+   It stays the third demo, as it is.
 2. *Fixed.* The fourth, Day One Capital, was proved by the firm's own description, not by a sentence about the
    round, because the page writes "DayOne Capital". It is now quoted from the sentence about imagi's round.
 3. *Fixed.* The seventh, MRG Economic Group, was given a startup directory as its site. It now says no site of
    its own was found.
 4. *Fixed.* "Angel investors from Anthropic, OpenAI, Sierra, Ramp, Cognition" gave four companies a place as
    investors, and "entrepreneurs" and "operators" passed as names. All seven are gone.
-5. *Left.* The first, Owl Ventures, is first through two Series A rounds (the stage next to seed earns a point, by
-   design), and its site could not be read.
-6. *Left.* Four rows were set apart for having no announcement date, and three eu-startups.com pages could not be
-   read.
+5. *Left, by design.* The first, Owl Ventures, is first through two Series A rounds (the stage next to seed earns a
+   point), and its site could not be read.
+6. *Left.* "Swiss family offices" came in with one of the newly read pages and passes as a name: the generic filter
+   knows "family offices" but not a nationality before it. It is outside the top ten.
+7. *Left.* Four rows are set apart for having no announcement date, and Sinai.ai's page (Egypt), read the first
+   time, could not be read on the second.
 
 ## Paid calls
 
@@ -147,19 +163,20 @@ call. Checking and ranking the two searches again cost nothing.
 The two demo runs cost $1.70 by the wallet ($38.752 before, $37.052 after). Each was first booked at $0.50, the
 difference at the moment the run ended; the rest was billed after that read. The settling read corrected demo 3
 to $1.10 by itself. Demo 2's late $0.10 had landed before demo 3 started, where the settling read leaves a run
-alone, so I booked it by hand in the ledger. The ledger and the wallet now agree at $1.70.
+alone, so I booked it by hand. The $1.20 spent before the build is one `correction` row in the ledger, with its
+note as the reference. The ledger now reads $2.90, the build's spend by the wallet, and the spend stop counts it.
 
 ## CPU on the live site
 
-Measured with `wrangler tail` on 9 November, ten requests each, after the fixes above:
+Measured with `wrangler tail` on 9 November, ten requests each, after every fix above:
 
 | Request | Median | Worst |
 |---|---|---|
-| The home | 31 ms | 80 ms |
-| A search's page (restaurant) | 21 ms | 37 ms |
-| A search's page (Kenya) | 11 ms | 35 ms |
-| An investor's page | 14 ms | 38 ms |
-| A search's CSV | 9 ms | 35 ms |
+| The home | 20 ms | 69 ms |
+| A search's page (restaurant) | 15 ms | 34 ms |
+| An investor's page | 10 ms | 16 ms |
+| A search's CSV | 9 ms | 14 ms |
 | The minute's cron, nothing to do | 3 to 6 ms | |
 
-The worst figures are most likely the first request a new isolate serves. Every request answered.
+Before the pattern fix the home's median was 169 ms and its worst 430 ms. The worst figures are most likely the
+first request a new isolate serves. Every request answered.
