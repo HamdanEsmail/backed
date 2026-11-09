@@ -6,12 +6,14 @@ import { recordSpend } from "../src/core/spend";
 import { runCron } from "../src/cron";
 import { advance, settleRunCost } from "../src/search/advance";
 import { importSearch, startAdminSearch } from "../src/search/create";
+import { committedSpend } from "../src/search/money";
 import { readSearch } from "../src/search/read";
 import { readSlot } from "../src/search/slot";
 import type { SearchInput } from "../src/search/spec";
 import { callWorker } from "./helpers/app";
+import { failingOn } from "./helpers/d1";
 import { fetchMock } from "./helpers/fetch-mock";
-import { companyRow, DATASET_ID, fakeTinyFish, type FakeTinyFish } from "./helpers/tinyset";
+import { companyRow, DATASET_ID, fakeTinyFish, RUN_ID, type FakeTinyFish } from "./helpers/tinyset";
 
 const T0 = new Date("2026-11-09T10:00:00.000Z");
 const at = (seconds: number) => new Date(T0.getTime() + seconds * 1000);
@@ -197,6 +199,50 @@ describe("a search from queued to ready", () => {
   });
 });
 
+describe("a start whose answer never came back", () => {
+  it("keeps the search counted at its budget and takes up the dataset TinySet made", async () => {
+    const id = await newSearch();
+    tf.wallet = ["10.00", "9.20"];
+    tf.createFails = { status: 502, made: true };
+    expect(await advance(env, id, at(0))).toMatchObject({ state: "finding", did: ["start_uncertain"] });
+    expect(await committedSpend(env.DB)).toBe(3);
+    expect((await readSlot(env.DB))?.search_id).toBe(id);
+
+    // Too soon to look; then the dataset is found by its name and taken up. Nothing is created twice.
+    expect((await advance(env, id, at(10))).did).toEqual([]);
+    expect(await advance(env, id, at(31))).toMatchObject({ state: "finding", did: ["start_found"] });
+    expect(await searchRow(id)).toMatchObject({ dataset_id: DATASET_ID, run_id: RUN_ID, wallet_before_usd: 10 });
+    expect(tf.creates).toBe(1);
+
+    // From here it is a search like any other, and its cost is the wallet's difference.
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    expect((await advance(env, id, at(45))).state).toBe("ready");
+    expect(await searchRow(id)).toMatchObject({ cost_usd: 0.8, cost_basis: "wallet" });
+  });
+
+  it("creates again only once TinySet shows that no dataset was made", async () => {
+    const id = await newSearch();
+    tf.createFails = { status: 502, made: false };
+    expect((await advance(env, id, at(0))).did).toEqual(["start_uncertain"]);
+    expect(await advance(env, id, at(31))).toEqual({ state: "finding", did: [] });
+    expect(tf.creates).toBe(1);
+    expect(await advance(env, id, at(5 * 60 + 1))).toEqual({ state: "queued", did: ["requeued"] });
+    expect((await readSlot(env.DB))?.search_id).toBe(null);
+    expect(await advance(env, id, at(5 * 60 + 2))).toMatchObject({ state: "finding", did: ["started"] });
+    expect(tf.creates).toBe(2);
+  });
+
+  it("fails at once when TinySet refuses the spec", async () => {
+    const id = await newSearch();
+    tf.createFails = { status: 422, made: false };
+    expect(await advance(env, id, at(0))).toMatchObject({ state: "failed", did: ["failed:start_failed"] });
+    expect(await committedSpend(env.DB)).toBe(0);
+    expect((await readSlot(env.DB))?.search_id).toBe(null);
+  });
+});
+
 describe("an announcement read that fails for a passing reason", () => {
   it("is tried again in a later call and proves, with one ledger row per read", async () => {
     const id = await newSearch();
@@ -307,6 +353,26 @@ describe("the run's end and its cost", () => {
     expect(await settleRunCost(env, at(11 + 10 * 60))).toEqual({ id: first, cost: 0.5 });
     expect(await searchRow(first)).toMatchObject({ cost_usd: 0.5 });
   });
+
+  it("books the run's cost with the move to checking, or not at all", async () => {
+    const id = await newSearch();
+    tf.wallet = ["10.00", "9.20"];
+    await advance(env, id, at(0));
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+
+    // The ledger cannot be written: the run is not ended either, so nothing is left unbooked.
+    const broken = { ...env, DB: failingOn(env.DB, /INTO spend/) };
+    await expect(advance(broken, id, at(11))).rejects.toThrow();
+    expect(await searchRow(id)).toMatchObject({ state: "finding", cost_basis: null });
+
+    // The next call ends the run and books it once.
+    expect((await advance(env, id, at(22))).state).toBe("ready");
+    expect(await searchRow(id)).toMatchObject({ cost_usd: 0.8, cost_basis: "wallet" });
+    const runs = await env.DB.prepare("SELECT amount_usd, ref FROM spend WHERE kind = 'dataset_run'").all();
+    expect(runs.results).toEqual([{ amount_usd: 0.8, ref: id }]);
+  });
 });
 
 describe("a search that does not finish", () => {
@@ -361,6 +427,37 @@ describe("a search that does not finish", () => {
     expect(late.state).toBe("failed");
     expect((await searchRow(id))?.failed_reason).toBe("timeout");
     expect((await readSlot(env.DB))?.search_id).toBe(null);
+  });
+
+  it("gives up on a dataset that can no longer be read, and books the rows it had", async () => {
+    const id = await newSearch();
+    await advance(env, id, at(0));
+    tf.rows = [ROW_A];
+    expect((await advance(env, id, at(11))).did).toEqual(["read:1", "proved:Larder Loop"]);
+
+    // Inside the run's time a failed read changes nothing.
+    tf.unreadable = true;
+    expect(await advance(env, id, at(30 * 60))).toEqual({ state: "finding", did: ["read_error:NOT_FOUND"] });
+
+    // Past it the search ends: the slot is free and the stop no longer holds $3 for it.
+    const late = await advance(env, id, at(41 * 60));
+    expect(late.state).toBe("failed");
+    expect(tf.cancels).toBe(1);
+    expect(await searchRow(id)).toMatchObject({ failed_reason: "timeout", cost_usd: 0.1, cost_basis: "rows" });
+    expect((await readSlot(env.DB))?.search_id).toBe(null);
+    expect(await committedSpend(env.DB)).toBeCloseTo(0.1, 6);
+  });
+
+  it("says the run took too long, not that nothing was found, when no row was ever read", async () => {
+    const id = await newSearch();
+    await advance(env, id, at(0));
+    tf.unreadable = true;
+    expect((await advance(env, id, at(41 * 60))).state).toBe("failed");
+    // The wallet was read at both ends and has not moved: nothing is booked for the run.
+    expect(await searchRow(id)).toMatchObject({ failed_reason: "timeout", cost_usd: 0, cost_basis: "rows" });
+    expect((await readSearch(env.DB, id))!.search.notice).toBe(
+      "This search did not finish: TinySet took too long and too few companies were proved. Nothing was ranked.",
+    );
   });
 });
 

@@ -187,6 +187,37 @@ that timed out once may answer the next time, and the other way round.
 7. *Left.* Four rows are set apart for having no announcement date, and Sinai.ai's page (Egypt), read the first
    time, could not be read on the second.
 
+## Five faults in how money and failures are handled, 10 November
+
+I read the search's state machine and the watch again with one question: what happens when TinySet, D1 or a
+visitor does the unexpected thing. Five answers were wrong. None had happened on the live site; each now has a
+test that failed before the fix.
+
+1. **The watches would have ended on the second visitor's search.** The cron ended every watch as soon as one
+   more $3 search no longer fitted under the stop, which is from about $6 committed. With $2.92 spent, one
+   visitor's finished search and a second one running would have deleted all three Monitors for good, at $6.90.
+   The watches now end only when spending itself reaches $9. New searches still close earlier, when one more
+   would not fit.
+2. **A start that never answered could be paid for twice.** A server error or a dropped connection on the create
+   call sent the search back to the queue, and the next minute created a second dataset; the first run, if
+   TinySet had made it, was never booked. Now only an answer that says the request was not taken (408, 409, 425,
+   429) is tried again. After anything else the search stays `finding`, counted at its $3 budget, and asks
+   TinySet for a dataset with its name made since the start. One found is taken up; none after five minutes
+   means none was made, and only then is the search queued again. The wallet is stored before the create, so the
+   cost is still the wallet's difference.
+3. **A dataset that could not be read kept its search running for ever.** The 40-minute limit was checked only
+   after a read that worked. A dataset that answered 404, or a TinySet outage longer than the run, left the
+   search `finding`, holding the run slot's place in the cron and $3 under the stop. It is now given up on at
+   the same 40 minutes: the run is cancelled if it can be, its cost is the wallet's difference or else the rows
+   last read, and the page says the run took too long, not that nothing was found.
+4. **A run could end without being booked.** The move to `checking` and the ledger row were two writes; a failure
+   between them left the run unbooked for good. They are now one write, and the ledger row's id is the search's,
+   so a run is booked exactly once.
+5. **A Monitor could be left running with no watch.** If the watch could not be stored after its Monitor was
+   made, the Monitor ran on, unbooked, with no route to delete it. It is now deleted again when the write fails.
+
+159 tests, 8 of them new.
+
 ## Paid calls
 
 TinySet runs and Monitor runs are the paid calls. A TinySet run is booked when it ends, from the wallet

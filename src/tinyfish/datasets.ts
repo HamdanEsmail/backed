@@ -136,6 +136,46 @@ export async function createDataset(env: Env, spec: DatasetSpec, targetRows: num
   return dataset;
 }
 
+const LIST_PAGE = 100;
+const LIST_PAGES = 3;
+
+/**
+ * The newest dataset named `name` (by its spec, else by its own name) that was made at or after
+ * `since`, or null. Read from the account's list, at most LIST_PAGES pages of LIST_PAGE. An entry
+ * that is not a dataset, or that carries no creation time, is passed over.
+ */
+export async function findDataset(env: Env, name: string, since: Date): Promise<Dataset | null> {
+  let newest: Dataset | null = null;
+  let newestAt = -Infinity;
+  let cursor: string | null = null;
+  for (let page = 0; page < LIST_PAGES; page++) {
+    const u = new URL(DATASETS_API);
+    u.searchParams.set("limit", String(LIST_PAGE));
+    if (cursor !== null) u.searchParams.set("cursor", cursor);
+    const res = await tinyfishFetch(env, u.toString(), {
+      method: "GET",
+      spend: { kind: "dataset", amountUsd: PRICES.dataset, ref: "list" },
+    });
+    const body = await readJson<{ data?: unknown; pagination?: { next_cursor?: unknown; has_more?: unknown } | null }>(res);
+    for (const item of Array.isArray(body.data) ? (body.data as unknown[]) : []) {
+      let d: Dataset;
+      try {
+        d = parseDataset(item);
+      } catch {
+        continue;
+      }
+      const madeAt = d.createdAt === null ? NaN : Date.parse(d.createdAt);
+      const named = d.spec?.name === name || str((item as { name?: unknown }).name) === name;
+      if (!named || !(madeAt >= since.getTime()) || madeAt <= newestAt) continue;
+      newest = d;
+      newestAt = madeAt;
+    }
+    cursor = str(body.pagination?.next_cursor);
+    if (body.pagination?.has_more !== true || cursor === null) break;
+  }
+  return newest;
+}
+
 /** The dataset's status, row count and latest run. */
 export async function getDataset(env: Env, id: string): Promise<Dataset> {
   const res = await tinyfishFetch(env, datasetUrl(id), {

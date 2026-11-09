@@ -3,14 +3,17 @@
 // and page is invented.
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { recordSpend } from "../src/core/spend";
 import { runCron } from "../src/cron";
 import { advance } from "../src/search/advance";
 import { startAdminSearch, startPublicSearch } from "../src/search/create";
+import { committedSpend } from "../src/search/money";
 import { readSearch } from "../src/search/read";
 import type { SearchInput } from "../src/search/spec";
 import { dateIn, factsFromAnnouncement, namesInHeadline } from "../src/watch/announcement";
-import { readMonitorRun, watchQuery } from "../src/watch/watch";
+import { readMonitorRun, startWatch, watchCron, watchQuery } from "../src/watch/watch";
 import { callWorker } from "./helpers/app";
+import { failingOn } from "./helpers/d1";
 import { fetchMock } from "./helpers/fetch-mock";
 import { companyRow, fakeTinyFish, type FakeTinyFish } from "./helpers/tinyset";
 
@@ -251,6 +254,36 @@ describe("the watch's limits", () => {
     await runCron(env, new Date());
     expect(monitorDeletes).toEqual([MONITOR_ID]);
     expect(await env.DB.prepare("SELECT ended_reason FROM watches WHERE search_id = ?").bind(id).first()).toEqual({ ended_reason: "until" });
+  });
+
+  it("keeps a watch while new searches run under the stop, and ends it only when paid work stops", async () => {
+    const id = await readyDemo();
+    await watch(id);
+    // About $4 spent and a visitor's search running, counted at its $3 budget: $7 of the $9 stop.
+    // No third search could start, but a Monitor run costs half a cent and the watch goes on.
+    await recordSpend(env.DB, "dataset_run", 3.9, "earlier searches");
+    const pub = await startPublicSearch(env, { ...INPUT, line: "Pantry planning software for care homes" }, "visitor-1", T0);
+    if (!pub.ok) throw new Error(pub.error);
+    expect((await advance(env, pub.id, at(100))).state).toBe("finding");
+    expect(await committedSpend(env.DB)).toBeCloseTo(7.005, 6);
+    expect((await watchCron(env, at(200))).ended).toBe(0);
+    expect(monitorDeletes).toEqual([]);
+    expect((await readSearch(env.DB, id))!.search.watch).toMatchObject({ active: true });
+
+    // At the stop itself every paid call ends, the watch's Monitor included.
+    await recordSpend(env.DB, "dataset_run", 2, "more searches");
+    expect((await watchCron(env, at(300))).ended).toBe(1);
+    expect(monitorDeletes).toEqual([MONITOR_ID]);
+    expect(await env.DB.prepare("SELECT ended_reason FROM watches WHERE search_id = ?").bind(id).first()).toEqual({ ended_reason: "spend_stop" });
+  });
+
+  it("deletes the Monitor it made when the watch cannot be stored", async () => {
+    const id = await readyDemo();
+    const broken = { ...env, DB: failingOn(env.DB, /INTO watches/) };
+    await expect(startWatch(broken, id, "pantry planning software", inDays(8), new Date())).rejects.toThrow();
+    expect(monitorCreates).toHaveLength(1);
+    expect(monitorDeletes).toEqual([MONITOR_ID]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM watches").first()).toEqual({ n: 0 });
   });
 });
 

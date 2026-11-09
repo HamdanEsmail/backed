@@ -16,3 +16,10 @@ export async function committedSpend(db: D1Database): Promise<number> {
 export async function spendStopReached(db: D1Database): Promise<boolean> {
   return (await committedSpend(db)) + SEARCH_BUDGET_USD > SPEND_STOP_USD + 1e-9;
 }
+
+/** True when spending itself has reached SPEND_STOP_USD. Every paid call ends then, the watches'
+ *  Monitor runs included. A Monitor run costs half a cent, so the watches go on well after the last
+ *  search that fits has started. */
+export async function paidWorkStopped(db: D1Database): Promise<boolean> {
+  return (await committedSpend(db)) >= SPEND_STOP_USD - 1e-9;
+}

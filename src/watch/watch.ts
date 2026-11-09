@@ -20,7 +20,7 @@ import { stageInText, type Stage } from "../core/stages";
 import type { Env } from "../env";
 import { lookUpWaysInLater, rankAgain } from "../search/advance";
 import { checkKeyOf } from "../search/facts";
-import { spendStopReached } from "../search/money";
+import { paidWorkStopped } from "../search/money";
 import { checkCompany } from "../search/proof";
 import { getSearch, saveCheck, stagesOf, type CompanyRow } from "../search/store";
 import { fetchPage } from "../tinyfish/fetch";
@@ -56,8 +56,9 @@ export type StartWatch =
 
 /**
  * Watches a ready demo search until `until` (YYYY-MM-DD, within WATCH_MAX_DAYS). Refused for a public
- * search, past MAX_WATCHES, or once the spend stop is reached. Creating the Monitor runs it once,
- * which is booked.
+ * search, past MAX_WATCHES, or once spending has reached the stop. Creating the Monitor runs it once,
+ * which is booked. A Monitor that cannot be stored is deleted again, so none runs that Backed holds
+ * no id for.
  */
 export async function startWatch(env: Env, searchId: string, keyWords: string, until: string, now: Date): Promise<StartWatch> {
   const s = await getSearch(env.DB, searchId);
@@ -75,7 +76,7 @@ export async function startWatch(env: Env, searchId: string, keyWords: string, u
   if (existing !== null && existing.ended_at === null) return { ok: false, status: 409, error: "already_watched", message: "This search is already watched." };
   const active = await env.DB.prepare("SELECT COUNT(*) AS n FROM watches WHERE ended_at IS NULL").first<{ n: number }>();
   if ((active?.n ?? 0) >= MAX_WATCHES) return { ok: false, status: 409, error: "too_many_watches", message: `At most ${MAX_WATCHES} searches are watched.` };
-  if (await spendStopReached(env.DB)) return { ok: false, status: 503, error: "spend_stop", message: "Paid work has stopped: this demo has spent its budget." };
+  if (await paidWorkStopped(env.DB)) return { ok: false, status: 503, error: "spend_stop", message: "Paid work has stopped: this demo has spent its budget." };
 
   const query = watchQuery(words, s.stage);
   const { monitorId } = await createTopicMonitor(env, {
@@ -88,12 +89,21 @@ export async function startWatch(env: Env, searchId: string, keyWords: string, u
     resultLimit: WATCH_RESULTS_PER_RUN,
   });
   const at = now.toISOString();
-  await env.DB.prepare(
-    `INSERT INTO watches (search_id, monitor_id, query, created_at, until) VALUES (?1, ?2, ?3, ?4, ?5)
-     ON CONFLICT (search_id) DO UPDATE SET monitor_id = ?2, query = ?3, created_at = ?4, until = ?5, last_run_at = NULL, ended_at = NULL, ended_reason = NULL`,
-  )
-    .bind(s.id, monitorId, query, at, until)
-    .run();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO watches (search_id, monitor_id, query, created_at, until) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT (search_id) DO UPDATE SET monitor_id = ?2, query = ?3, created_at = ?4, until = ?5, last_run_at = NULL, ended_at = NULL, ended_reason = NULL`,
+    )
+      .bind(s.id, monitorId, query, at, until)
+      .run();
+  } catch (err) {
+    try {
+      await deleteMonitor(env, monitorId);
+    } catch {
+      // The write's own failure is the one reported.
+    }
+    throw err;
+  }
   return { ok: true, watch: (await getWatch(env.DB, s.id))! };
 }
 
@@ -299,14 +309,14 @@ export async function readHits(env: Env, now: Date = new Date()): Promise<string
 
 /**
  * The watch's part of the minute's cron: end every watch past its last day, or all of them once
- * the spend stop is reached (their Monitors deleted by the ids stored here); read waiting results;
- * look up the way in for investors a watch brought into a top ten.
+ * spending has reached the stop (their Monitors deleted by the ids stored here); read waiting
+ * results; look up the way in for investors a watch brought into a top ten.
  */
 export async function watchCron(env: Env, now: Date = new Date()): Promise<{ ended: number; read: number }> {
   const { results: active } = await env.DB.prepare("SELECT * FROM watches WHERE ended_at IS NULL").all<WatchRow>();
   let ended = 0;
   if (active.length > 0) {
-    const stop = await spendStopReached(env.DB);
+    const stop = await paidWorkStopped(env.DB);
     const today = now.toISOString().slice(0, 10);
     for (const w of active) {
       if (!stop && w.until >= today) continue;

@@ -2,9 +2,11 @@
 // called and is safe to call twice at once: every step claims its work in one statement first.
 //
 //   queued   -> finding   the run slot is free and this is the oldest queued search: the wallet is
-//                         read and the TinySet dataset created.
+//                         read and the TinySet dataset created. A start whose answer never came
+//                         back is not made again: its dataset is looked for by name first.
 //   finding  -> checking  the dataset is read (at most every DATASET_READ_EVERY_SECONDS) and its rows
-//                         stored; when the run ends, its cost is booked and the slot freed.
+//                         stored; when the run ends, or can no longer be read past its time, its
+//                         cost is booked in the same write and the slot freed.
 //   finding, checking     companies are checked against their announcements, a few per call.
 //   checking -> ranking   every company is checked.
 //   ranking  -> ready     the investors are scored and the order stored; then the way in is looked
@@ -27,11 +29,10 @@ import {
   WAY_IN_TOP,
   WAY_INS_PER_ADVANCE,
 } from "../core/limits";
-import { recordSpend } from "../core/spend";
 import { stageOfRound } from "../core/stages";
 import type { Env } from "../env";
 import { TinyFishError } from "../tinyfish/client";
-import { cancelRun, createDataset, getDataset, listRows, type DatasetSpec } from "../tinyfish/datasets";
+import { cancelRun, createDataset, findDataset, getDataset, listRows, type Dataset, type DatasetSpec } from "../tinyfish/datasets";
 import { fetchPage } from "../tinyfish/fetch";
 import { readBalance } from "../tinyfish/wallet";
 import { spendStopReached } from "./money";
@@ -53,11 +54,15 @@ import {
   type SearchRow,
 } from "./store";
 
-/** A search still `finding` without a dataset this long after it was claimed (the Worker died
- *  between the claim and the create) goes back to the queue. */
+/** TinySet answers that mean the request was not taken: the search stays queued and is tried again. */
+const NOT_TAKEN = new Set([408, 409, 425, 429]);
+/** A start is given this long to answer before its dataset is looked for on TinySet. */
+const LOST_START_LOOK_AFTER_SECONDS = 30;
+/** No dataset on TinySet this long after a start that never answered: none was made, and the search
+ *  goes back to the queue to be created again. */
 const LOST_START_MINUTES = 5;
-/** TinySet answers that mean "not now": the search stays queued and is tried again. */
-const RETRY_LATER = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+/** A dataset counts as a start's own when it was made no earlier than this before it: clocks differ. */
+const LOST_START_CLOCK_SLACK_SECONDS = 60;
 
 export type AdvanceResult = { state: string; did: string[] };
 
@@ -104,50 +109,73 @@ async function start(env: Env, s: SearchRow, now: Date, did: string[]): Promise<
   } catch {
     // The cost is then counted from the rows.
   }
+  // Stored before the create, so a start whose answer is lost still knows the wallet it began with.
+  await env.DB.prepare("UPDATE searches SET wallet_before_usd = ? WHERE id = ?").bind(before, s.id).run();
   try {
     const ds = await createDataset(env, JSON.parse(s.spec_json) as DatasetSpec, TARGET_ROWS);
-    await env.DB.prepare(
-      "UPDATE searches SET dataset_id = ?, run_id = ?, dataset_status = ?, row_count = ?, wallet_before_usd = ? WHERE id = ?",
-    )
-      .bind(ds.id, ds.run?.id ?? null, ds.status, ds.rowCount, before, s.id)
-      .run();
+    await takeUp(env.DB, s.id, ds);
     did.push("started");
   } catch (err) {
-    const retry = !(err instanceof TinyFishError) || RETRY_LATER.has(err.status);
-    if (retry) {
-      await env.DB.prepare("UPDATE searches SET state = 'queued', started_at = NULL WHERE id = ? AND state = 'finding'").bind(s.id).run();
-      await releaseSlot(env.DB, s.id);
+    const status = err instanceof TinyFishError ? err.status : null;
+    if (status !== null && NOT_TAKEN.has(status)) {
+      await requeue(env.DB, s.id);
       did.push("start_later");
-    } else {
+    } else if (status !== null && status >= 400 && status < 500) {
       await fail(env, { ...s, state: "finding" }, "finding", "start_failed", now);
       did.push("failed:start_failed");
+    } else {
+      // A server error, a dropped connection, an answer that could not be read or stored: TinySet
+      // may have made the dataset and started a paid run. Creating again could pay twice, so the
+      // search stays `finding`, counted at its budget, and `find` looks for the dataset by name.
+      did.push("start_uncertain");
     }
   }
 }
 
+/** Records the dataset a search's run fills. False when the search already has one. */
+async function takeUp(db: D1Database, searchId: string, ds: Dataset): Promise<boolean> {
+  const r = await db
+    .prepare("UPDATE searches SET dataset_id = ?, run_id = ?, dataset_status = ?, row_count = ? WHERE id = ? AND state = 'finding' AND dataset_id IS NULL")
+    .bind(ds.id, ds.run?.id ?? null, ds.status, ds.rowCount, searchId)
+    .run();
+  return r.meta.changes === 1;
+}
+
+/** Puts a search with no dataset back in the queue and frees the slot. */
+async function requeue(db: D1Database, searchId: string): Promise<boolean> {
+  const r = await db
+    .prepare("UPDATE searches SET state = 'queued', started_at = NULL, wallet_before_usd = NULL WHERE id = ? AND state = 'finding' AND dataset_id IS NULL")
+    .bind(searchId)
+    .run();
+  if (r.meta.changes !== 1) return false;
+  await releaseSlot(db, searchId);
+  return true;
+}
+
 // --- finding -------------------------------------------------------------------------------------
 
-/** The run has ended: book what it cost (once), free the slot, move on to checking. */
+/**
+ * The run has ended: the search moves on to checking and what the run cost is booked, in one write,
+ * so a run is never ended without being booked. Then the slot is freed. `billedRows` is the rows
+ * TinySet filled, or null when the dataset could not be read to say.
+ */
 async function endRun(
   env: Env,
   s: SearchRow,
   status: string,
   rowCount: number,
-  billedRows: number,
+  billedRows: number | null,
   problem: string | null,
   now: Date,
   did: string[],
 ): Promise<void> {
-  const moved = await env.DB.prepare(
-    "UPDATE searches SET state = 'checking', dataset_status = ?, row_count = ?, failed_reason = ? WHERE id = ? AND state = 'finding'",
-  )
-    .bind(status, rowCount, problem, s.id)
-    .run();
-  if (moved.meta.changes !== 1) return;
-  did.push(`run_ended:${status}`);
-
+  const statements: D1PreparedStatement[] = [];
   if (s.origin === "import") {
-    await env.DB.prepare("UPDATE searches SET cost_usd = 0, cost_basis = 'import' WHERE id = ?").bind(s.id).run();
+    statements.push(
+      env.DB.prepare(
+        "UPDATE searches SET state = 'checking', dataset_status = ?, row_count = ?, failed_reason = ?, cost_usd = 0, cost_basis = 'import' WHERE id = ? AND state = 'finding'",
+      ).bind(status, rowCount, problem, s.id),
+    );
   } else {
     let after: number | null = null;
     try {
@@ -157,16 +185,29 @@ async function endRun(
     }
     // The wallet's difference is the cost while this key is Backed's alone. A difference above the
     // search's budget means something else spent too, and none means the bill has not landed: then
-    // the rows TinySet filled count, at the rate card.
-    const byRows = Math.round(billedRows * PRICES.dataset_row * 1e6) / 1e6;
+    // the rows TinySet filled count, at the rate card. When the rows are not known either, the run
+    // is counted at nothing if the wallet was read at both ends and has not moved, else at the
+    // whole budget.
     const diff = s.wallet_before_usd !== null && after !== null ? Math.round((s.wallet_before_usd - after) * 1e6) / 1e6 : null;
+    const byRows = billedRows !== null ? Math.round(billedRows * PRICES.dataset_row * 1e6) / 1e6 : diff === 0 ? 0 : SEARCH_BUDGET_USD;
     const useWallet = diff !== null && diff > 0 && diff <= SEARCH_BUDGET_USD + 1e-9;
     const cost = useWallet ? diff : byRows;
-    await recordSpend(env.DB, "dataset_run", cost, s.id);
-    await env.DB.prepare("UPDATE searches SET wallet_after_usd = ?, cost_usd = ?, cost_basis = ?, run_booked_at = ? WHERE id = ?")
-      .bind(after, cost, useWallet ? "wallet" : "rows", now.toISOString(), s.id)
-      .run();
+    const at = now.toISOString();
+    statements.push(
+      env.DB.prepare(
+        `UPDATE searches SET state = 'checking', dataset_status = ?, row_count = ?, failed_reason = ?,
+           wallet_after_usd = ?, cost_usd = ?, cost_basis = ?, run_booked_at = ? WHERE id = ? AND state = 'finding'`,
+      ).bind(status, rowCount, problem, after, cost, useWallet ? "wallet" : "rows", at, s.id),
+      // The ledger row is written only with the move above, and once: its id is the search's.
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO spend (id, kind, amount_usd, ref, at)
+         SELECT ?1, 'dataset_run', ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM searches WHERE id = ?3 AND state = 'checking' AND run_booked_at = ?4)`,
+      ).bind(`dataset_run:${s.id}`, cost, s.id, at),
+    );
   }
+  const written = await env.DB.batch(statements);
+  if (written[0]?.meta.changes !== 1) return;
+  did.push(`run_ended:${status}`);
   await releaseSlot(env.DB, s.id);
 }
 
@@ -210,24 +251,49 @@ export async function settleRunCost(env: Env, now: Date = new Date()): Promise<{
   return { id: s.id, cost: total };
 }
 
-async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
-  if (s.dataset_id === null) {
-    if (s.origin !== "import" && minutesAgo(now, s.started_at) > LOST_START_MINUTES) {
-      await env.DB.prepare("UPDATE searches SET state = 'queued', started_at = NULL WHERE id = ? AND state = 'finding' AND dataset_id IS NULL")
-        .bind(s.id)
-        .run();
-      await releaseSlot(env.DB, s.id);
-      did.push("requeued");
-    }
-    return;
-  }
+/** Claims a search's next look at TinySet: one caller in DATASET_READ_EVERY_SECONDS gets it. */
+async function claimLook(db: D1Database, s: SearchRow, now: Date): Promise<boolean> {
   const due = new Date(now.getTime() - DATASET_READ_EVERY_SECONDS * 1000).toISOString();
-  const claim = await env.DB.prepare(
-    "UPDATE searches SET synced_at = ? WHERE id = ? AND state = 'finding' AND (synced_at IS NULL OR synced_at <= ?)",
-  )
+  const claim = await db
+    .prepare("UPDATE searches SET synced_at = ? WHERE id = ? AND state = 'finding' AND (synced_at IS NULL OR synced_at <= ?)")
     .bind(now.toISOString(), s.id, due)
     .run();
-  if (claim.meta.changes !== 1) return;
+  return claim.meta.changes === 1;
+}
+
+/**
+ * A search still `finding` with no dataset: its start never answered (a server error, a dropped
+ * connection, a Worker that stopped). TinySet is asked for a dataset with this search's name made
+ * since the start. One found is this search's own and is taken up. None after LOST_START_MINUTES
+ * means none was made, and only then is the search queued to be created again.
+ */
+async function findLostStart(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
+  const age = minutesAgo(now, s.started_at);
+  if (age * 60 < LOST_START_LOOK_AFTER_SECONDS || !(await claimLook(env.DB, s, now))) return;
+  let made: Dataset | null;
+  try {
+    const since = new Date(Date.parse(s.started_at ?? "") - LOST_START_CLOCK_SLACK_SECONDS * 1000);
+    made = await findDataset(env, (JSON.parse(s.spec_json) as DatasetSpec).name, since);
+  } catch (err) {
+    if (!(err instanceof TinyFishError)) throw err;
+    did.push(`read_error:${err.code}`);
+    // TinySet could not say for the whole length of a run: the search ends as one that would not start.
+    if (age > SEARCH_TIMEOUT_MINUTES) await endRun(env, s, "unknown", 0, null, "start_failed", now, did);
+    return;
+  }
+  if (made !== null) {
+    if (await takeUp(env.DB, s.id, made)) did.push("start_found");
+  } else if (age > LOST_START_MINUTES) {
+    if (await requeue(env.DB, s.id)) did.push("requeued");
+  }
+}
+
+async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
+  if (s.dataset_id === null) {
+    if (s.origin !== "import") await findLostStart(env, s, now, did);
+    return;
+  }
+  if (!(await claimLook(env.DB, s, now))) return;
 
   try {
     const ds = await getDataset(env, s.dataset_id);
@@ -261,6 +327,20 @@ async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<v
   } catch (err) {
     if (!(err instanceof TinyFishError)) throw err;
     did.push(`read_error:${err.code}`);
+    // A dataset that cannot be read is given up on at the same time as one that never finishes, so
+    // it cannot hold the slot, a place in the cron or $3 under the stop for good. Its cost is the
+    // wallet's difference, else the rows last read.
+    if (minutesAgo(now, s.started_at) > SEARCH_TIMEOUT_MINUTES) {
+      if (s.run_id !== null) {
+        try {
+          await cancelRun(env, s.dataset_id, s.run_id);
+        } catch {
+          // The run is given up on either way; rows read so far are kept.
+        }
+      }
+      const known = s.row_count ?? 0;
+      await endRun(env, s, "unknown", known, known > 0 ? known : null, "timeout", now, did);
+    }
   }
 }
 
@@ -306,12 +386,13 @@ async function check(env: Env, s: SearchRow, now: Date, startedMs: number, did: 
 async function finishChecking(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
   const counts = await companyCounts(env.DB, s.id);
   if (counts.pending > 0) return;
-  if (counts.found === 0) {
-    if (await fail(env, s, "checking", "none_found", now)) did.push("failed:none_found");
-    return;
-  }
+  // A run that ended badly says so, even with no company found: "none found" is for a run that finished.
   if (s.failed_reason !== null && counts.proved < MIN_PROVED_TO_RANK) {
     if (await fail(env, s, "checking", s.failed_reason, now)) did.push(`failed:${s.failed_reason}`);
+    return;
+  }
+  if (counts.found === 0) {
+    if (await fail(env, s, "checking", "none_found", now)) did.push("failed:none_found");
     return;
   }
   const r = await env.DB.prepare(

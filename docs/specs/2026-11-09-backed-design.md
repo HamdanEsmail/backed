@@ -61,6 +61,12 @@ Only one search runs at a time; a second waits in a queue (`queued`). The wallet
 after it ends, and the difference is the search's real cost in the ledger. That holds while Backed is the only
 user of this TinyFish account; if another project shares the key, cost is counted from the rows instead.
 
+A run is paid for, so it is never started twice for one search. When the create call gets no clear answer (a
+server error, a dropped connection), the search is not created again: it stays `finding`, counted at its budget,
+and looks on TinySet for a dataset with its name made since the start. Only when none is there after five
+minutes is it queued again. A dataset that can no longer be read is given up on after 40 minutes, like a run
+that never finishes. The end of a run and its cost are one write.
+
 The same line, stage and country within 7 days opens the stored search instead of starting a new one.
 
 ## 4. From the founder's line to a TinySet spec
@@ -177,7 +183,8 @@ Every call is one row in a spend ledger. The About page and `/api/stats` show ca
 ## 10. Limits and money
 
 - A new search is budgeted at $3 and has cost about $1. All paid work stops when total spend reaches **$9**; stored
-  searches stay readable and the form says why it is closed.
+  searches stay readable and the form says why it is closed. New searches close a little earlier, when one more
+  at its budget would not fit; a watch's Monitor runs, half a cent each, go on until the stop itself.
 - Public visitors: **3 new searches a day in total**, 1 per visitor a day, and one search running at a time.
   Opening a stored search is free and not limited.
 - A visitor is known only by a salted hash of their IP address.

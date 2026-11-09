@@ -28,6 +28,13 @@ export type FakeTinyFish = {
   creates: number;
   cancels: number;
   spec: unknown;
+  /** The next create answers this status with no dataset in it; `made` says whether TinySet made
+   *  the dataset all the same. */
+  createFails: { status: number; made: boolean } | null;
+  /** The dataset is on the account's list: true after a create that made it. */
+  listed: boolean;
+  /** The dataset and its rows answer 404. */
+  unreadable: boolean;
 };
 
 export function fakeTinyFish(): FakeTinyFish {
@@ -45,7 +52,11 @@ export function fakeTinyFish(): FakeTinyFish {
     creates: 0,
     cancels: 0,
     spec: null,
+    createFails: null,
+    listed: false,
+    unreadable: false,
   };
+  const gone = () => Response.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
   const dataset = () => ({
     id: DATASET_ID,
     name: "Funding rounds",
@@ -69,16 +80,34 @@ export function fakeTinyFish(): FakeTinyFish {
     reply: (_req, body) => {
       tf.creates++;
       tf.spec = (body as { spec: unknown }).spec;
+      const failure = tf.createFails;
+      if (failure !== null) {
+        tf.createFails = null;
+        tf.listed = failure.made;
+        return new Response("upstream error", { status: failure.status });
+      }
+      tf.listed = true;
       return Response.json(dataset(), { status: 202 });
     },
   });
   fetchMock.intercept({
     method: "GET",
+    url: new RegExp(`^${DATASETS_API}\\?`),
+    times: Infinity,
+    reply: () => Response.json({ data: tf.listed ? [dataset()] : [], pagination: { next_cursor: null, has_more: false } }),
+  });
+  fetchMock.intercept({
+    method: "GET",
     url: new RegExp(`^${DATASETS_API}/${DATASET_ID}/rows\\?`),
     times: Infinity,
-    reply: () => Response.json({ columns: [], rows: tf.rows, truncated: false, next_cursor: null }),
+    reply: () => (tf.unreadable ? gone() : Response.json({ columns: [], rows: tf.rows, truncated: false, next_cursor: null })),
   });
-  fetchMock.intercept({ method: "GET", url: `${DATASETS_API}/${DATASET_ID}`, times: Infinity, reply: () => Response.json(dataset()) });
+  fetchMock.intercept({
+    method: "GET",
+    url: `${DATASETS_API}/${DATASET_ID}`,
+    times: Infinity,
+    reply: () => (tf.unreadable ? gone() : Response.json(dataset())),
+  });
   fetchMock.intercept({
     method: "POST",
     url: `${DATASETS_API}/${DATASET_ID}/runs/${RUN_ID}/cancel`,

@@ -60,14 +60,20 @@ Each search moves on by itself (the cron runs `advance` every minute); `GET /api
 A run takes 5 to 20 minutes, then the checks and the way in a few minutes more. Its cost is booked from the
 wallet when the run ends (`GET /api/stats`, `tinyfish.tinyset.usd`).
 
+A search that stays `finding` with no `dataset_id` had a start that never answered. It is not created again:
+it looks for its dataset on TinySet by name, takes it up if it is there, and goes back to the queue after five
+minutes if it is not. A search whose dataset cannot be read ends as `failed` (`timeout`) 40 minutes after it
+started. Neither needs a hand.
+
 ## Watching the demo searches
 
 A watch is one TinyFish Topic Monitor per demo search that runs "<key words> raises seed funding" at 06:00 and
 18:00 UTC and calls `/hooks/monitor/<WEBHOOK_SECRET>`. Each new result is read with Fetch, read as one company's
 facts and put through the same proof check; only a proved company is added, and the search is ranked again in
 place. At most 3 watches; demo searches only; each Monitor run is booked at $0.005 (creating one runs it once).
-The cron deletes a watch's Monitor after its `until` day, or every watch's Monitor once the spend stop is
-reached. Backed deletes only the Monitor ids stored in `watches`; it never lists, pauses or edits others.
+The cron deletes a watch's Monitor after its `until` day, or every watch's Monitor once spending reaches the $9
+stop itself. New searches close earlier, when one more at its $3 budget would not fit; the watches go on.
+Backed deletes only the Monitor ids stored in `watches`; it never lists, pauses or edits others.
 
 `npm run migrate:remote` first (it applies `0007_watch.sql`), then, with `until` the last day:
 
