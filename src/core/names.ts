@@ -131,8 +131,14 @@ export function hasFundingWord(sentence: string): boolean {
 /** The text with accents removed, character for character, so positions in it are positions in
  *  the original. A character that does not fold to one of the same length is kept as it is. */
 export function foldAccents(text: string): string {
+  // Most text is plain ASCII, which has no accents to fold.
+  if (/^[\x00-\x7f]*$/.test(text)) return text;
   let out = "";
   for (const ch of text) {
+    if (ch.charCodeAt(0) < 0x80) {
+      out += ch;
+      continue;
+    }
     const f = ch.normalize("NFD").replace(/\p{M}/gu, "");
     out += f.length === ch.length ? f : ch;
   }
@@ -163,6 +169,20 @@ export type NameMatcher = {
 
 /** The name prepared once: its words and its pattern. Null for a name with no words left. */
 export function matcherFor(name: string): NameMatcher | null {
+  const known = matchers.get(name);
+  if (known !== undefined) return known;
+  if (matchers.size >= MATCHERS_KEPT) matchers.clear();
+  const m = buildMatcher(name);
+  matchers.set(name, m);
+  return m;
+}
+
+/** Patterns already compiled in this isolate: a page names the same investors many times, and so
+ *  do the pages after it. */
+const matchers = new Map<string, NameMatcher | null>();
+const MATCHERS_KEPT = 5000;
+
+function buildMatcher(name: string): NameMatcher | null {
   const words = nameWords(name);
   if (words.length === 0) return null;
   return {
