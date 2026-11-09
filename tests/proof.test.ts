@@ -121,6 +121,40 @@ describe("checkCompany", () => {
     expect(checkCompany(f, WINDOW, [...STAGES], { text: named }).status).toBe("proved");
   });
 
+  it("names a one-word company written twice inside sentences, though no funding sentence names it", () => {
+    const f = facts({ company: "Kettle", lead_investor: "Copperline Ventures", other_investors: null });
+    const text = [
+      "Schools now plan meals with Kettle across three counties.",
+      "Cooks say Kettle saves an hour a day.",
+      "The company raised a seed round led by Copperline Ventures.",
+    ].join(" ");
+    expect(checkCompany(f, WINDOW, [...STAGES], { text }).status).toBe("proved");
+    // Once is not enough.
+    const once = "Schools now plan meals with Kettle. The company raised a seed round led by Copperline Ventures.";
+    expect(checkCompany(f, WINDOW, [...STAGES], { text: once })).toMatchObject({ status: "set_apart", reason: "company_not_named" });
+  });
+
+  it("does not name a one-word company from an ordinary word that only starts sentences", () => {
+    const f = facts({ company: "Kettle", lead_investor: "Copperline Ventures", other_investors: null });
+    const text = "Kettle sales rose. Kettle prices fell. Kettle makers worry. The company raised a seed round led by Copperline Ventures.";
+    expect(checkCompany(f, WINDOW, [...STAGES], { text })).toMatchObject({ status: "set_apart", reason: "company_not_named" });
+  });
+
+  it("names a one-word company from the title or a heading", () => {
+    const f = facts({ company: "Kettle", lead_investor: "Copperline Ventures", other_investors: null });
+    const body = "The company raised a seed round led by Copperline Ventures.";
+    expect(checkCompany(f, WINDOW, [...STAGES], { text: `## About Kettle\n\n${body}` }).status).toBe("proved");
+    expect(checkCompany(f, WINDOW, [...STAGES], { text: body, title: "Kettle plans school meals" }).status).toBe("proved");
+  });
+
+  it("does not take seed in its ordinary sense for a funding word", () => {
+    const f = facts({ company: "Larder Loop", lead_investor: "Harvest", other_investors: null });
+    const text = "Larder Loop helps farmers plant seed earlier. Harvest comes a month sooner, and the series of trials continues.";
+    expect(checkCompany(f, WINDOW, [...STAGES], { text })).toMatchObject({ status: "set_apart", reason: "no_investor_named" });
+    const funding = "Larder Loop closed its seed round with Harvest.";
+    expect(checkCompany(f, WINDOW, [...STAGES], { text: funding }).status).toBe("proved");
+  });
+
   it("matches names whatever their accents, case or legal suffix", () => {
     const f = facts({ lead_investor: "Ālto Capital, LLC", other_investors: null });
     const text = "Larder Loop's round was led by ALTO CAPITAL with others.";

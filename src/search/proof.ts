@@ -2,7 +2,18 @@
 // lists? Pure functions; the read itself happens in advance.ts. A company is proved (at least one
 // listed investor is named on the page) or set apart with a reason. Nothing else.
 import { QUOTE_MAX_CHARS } from "../core/limits";
-import { findName, hasFundingWord, matcherFor, splitNames, nameKey } from "../core/names";
+import {
+  findName,
+  matcherFor,
+  nameHits,
+  nameKey,
+  prepareSentence,
+  splitNames,
+  startsSentence,
+  type NameMatcher,
+  type Sentence,
+  type SentenceKind,
+} from "../core/names";
 import { stageOfRound, type Stage } from "../core/stages";
 import type { CompanyFacts } from "./facts";
 
@@ -102,17 +113,18 @@ const WRAPPED_LINE_CHARS = 50;
 const BLOCK_START = /^\s*(?:#{1,6}\s|>|[-*+•]\s|\d+[.)]\s|\|)/;
 
 /**
- * The page's sentences, the title first. A heading, a list item, a table row and a short line
- * (a menu entry) are blocks of their own, so they never run into the next line; a long prose line
- * that stops mid-sentence is joined to the line after it, as pages wrapped at a fixed width need.
+ * The page's sentences, the title first, each prepared once for every name searched in it. A
+ * heading, a list item, a table row and a short line (a menu entry) are blocks of their own, so
+ * they never run into the next line; a long prose line that stops mid-sentence is joined to the
+ * line after it, as pages wrapped at a fixed width need.
  */
-export function sentencesOf(text: string, title: string | null = null): string[] {
-  const blocks: string[] = [];
-  if (title !== null && plainLine(title) !== "") blocks.push(plainLine(title));
+export function pageSentences(text: string, title: string | null = null): Sentence[] {
+  const blocks: { text: string; kind: SentenceKind }[] = [];
+  if (title !== null && plainLine(title) !== "") blocks.push({ text: plainLine(title), kind: "title" });
   let paragraph = "";
   let open = false;
   const flush = () => {
-    if (paragraph !== "") blocks.push(paragraph);
+    if (paragraph !== "") blocks.push({ text: paragraph, kind: "text" });
     paragraph = "";
     open = false;
   };
@@ -124,14 +136,19 @@ export function sentencesOf(text: string, title: string | null = null): string[]
     }
     if (BLOCK_START.test(line)) {
       flush();
-      blocks.push(plain);
+      blocks.push({ text: plain, kind: /^\s*#{1,6}\s/.test(line) ? "heading" : "text" });
       continue;
     }
     paragraph = open ? `${paragraph} ${plain}` : (flush(), plain);
     open = line.trim().length >= WRAPPED_LINE_CHARS && !/[.!?:"”'’)\]]$/.test(plain);
   }
   flush();
-  return blocks.flatMap(splitSentences);
+  return blocks.flatMap((b) => splitSentences(b.text).map((t) => prepareSentence(t, b.kind)));
+}
+
+/** The page's sentences as text. */
+export function sentencesOf(text: string, title: string | null = null): string[] {
+  return pageSentences(text, title).map((s) => s.text);
 }
 
 // --- Finding names and cutting quotations --------------------------------------------------------
@@ -140,18 +157,41 @@ export type Found = { sentence: string; start: number; end: number };
 
 /** Where the page names `name`: the first sentence with a funding word that names it, else the
  *  first sentence that names it at all. Null when no sentence does. */
-export function findInPage(sentences: string[], name: string): Found | null {
-  const m = matcherFor(name);
+export function findInPage(sentences: Sentence[], m: NameMatcher | null): Found | null {
   if (m === null) return null;
   let first: Found | null = null;
   for (const sentence of sentences) {
     const hit = findName(sentence, m);
     if (hit === null) continue;
-    const found = { sentence, ...hit };
-    if (hasFundingWord(sentence)) return found;
+    const found = { sentence: sentence.text, ...hit };
+    if (sentence.funding) return found;
     first ??= found;
   }
   return first;
+}
+
+/** Times a one-word company name must appear inside a sentence (not as its first word) to count
+ *  when no title, heading or funding sentence names it. */
+const COMPANY_MID_SENTENCE_HITS = 2;
+
+/**
+ * Does the page name the company? A name of two or more words: anywhere, as a whole name. A
+ * one-word name is also an ordinary word, but an article about a company names it all through while
+ * its funding sentence often says "the company". So it counts, written with its capital letter as a
+ * whole word, when it is in the title or a heading, in a funding sentence, or at least twice inside
+ * a sentence (not as its first word, where any word has a capital).
+ */
+export function companyNamed(sentences: Sentence[], m: NameMatcher | null): boolean {
+  if (m === null) return false;
+  let midSentence = 0;
+  for (const sentence of sentences) {
+    const hits = nameHits(sentence, m);
+    if (hits.length === 0) continue;
+    if (!m.oneWord || sentence.kind !== "text" || sentence.funding) return true;
+    midSentence += hits.filter((h) => !startsSentence(sentence, h)).length;
+    if (midSentence >= COMPANY_MID_SENTENCE_HITS) return true;
+  }
+  return false;
 }
 
 /** Clause ends: a comma, semicolon, colon, dash or bracket, with what follows it. */
@@ -210,8 +250,8 @@ export function cutQuote(sentence: string, start: number, end: number, max: numb
 }
 
 /** The page's quotation for `name`, or null when the page does not name it. */
-export function quoteFor(sentences: string[], name: string): string | null {
-  const found = findInPage(sentences, name);
+export function quoteFor(sentences: Sentence[], name: string): string | null {
+  const found = findInPage(sentences, matcherFor(name));
   return found === null ? null : cutQuote(found.sentence, found.start, found.end);
 }
 
@@ -232,8 +272,8 @@ export function checkCompany(
   if (refused !== null) return { status: "set_apart", reason: refused, investors: unnamed(f) };
   if (page === null || page.text.trim() === "") return { status: "set_apart", reason: "unreadable", investors: unnamed(f) };
 
-  const sentences = sentencesOf(page.text, page.title ?? null);
-  if (findInPage(sentences, f.name) === null) return { status: "set_apart", reason: "company_not_named", investors: unnamed(f) };
+  const sentences = pageSentences(page.text, page.title ?? null);
+  if (!companyNamed(sentences, matcherFor(f.name))) return { status: "set_apart", reason: "company_not_named", investors: unnamed(f) };
 
   const investors: CheckedInvestor[] = listedInvestors(f).map((i) => {
     const quote = quoteFor(sentences, i.name);
@@ -241,7 +281,7 @@ export function checkCompany(
   });
   if (!investors.some((i) => i.named)) return { status: "set_apart", reason: "no_investor_named", investors };
 
-  const partner = f.leadPartner !== null && findInPage(sentences, f.leadPartner) !== null ? f.leadPartner : null;
-  const founders = splitNames(f.founders).filter((n) => findInPage(sentences, n) !== null);
+  const partner = f.leadPartner !== null && findInPage(sentences, matcherFor(f.leadPartner)) !== null ? f.leadPartner : null;
+  const founders = splitNames(f.founders).filter((n) => findInPage(sentences, matcherFor(n)) !== null);
   return { status: "proved", stage: stageOfRound(f.roundType)!, investors, partner, founders };
 }

@@ -24,7 +24,7 @@ export const DATASET_READ_EVERY_SECONDS = 10;
 /** Pages of rows read per dataset read (500 rows a page; a search asks for 30). */
 export const MAX_ROW_PAGES = 4;
 /** Companies one `advance` call checks at most. */
-export const CHECKS_PER_ADVANCE = 5;
+export const CHECKS_PER_ADVANCE = 3;
 /** A company claimed for checking and not finished in this time can be claimed again. */
 export const CHECK_CLAIM_STALE_MINUTES = 2;
 /** An announcement or an investor's page is waited for this long at most. */

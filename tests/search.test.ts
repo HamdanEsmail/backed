@@ -177,6 +177,43 @@ describe("a search from queued to ready", () => {
   });
 });
 
+describe("the run's end and its cost", () => {
+  it("does not end a run while the dataset reads empty and the run is still going", async () => {
+    const id = await newSearch();
+    await advance(env, id, at(0));
+    tf.status = "empty";
+    tf.runStatus = "running";
+    expect((await advance(env, id, at(11))).state).toBe("finding");
+    tf.runStatus = "done";
+    expect((await advance(env, id, at(22))).state).toBe("failed");
+  });
+
+  it("books the wallet's difference up to the search's budget, else the rows TinySet filled", async () => {
+    // $0.80 for a run that left one usable row: the wallet is right, whatever the rows say.
+    const id = await newSearch();
+    tf.wallet = ["10.00", "9.20"];
+    await advance(env, id, at(0));
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    await advance(env, id, at(11));
+    expect(await searchRow(id)).toMatchObject({ cost_usd: 0.8, cost_basis: "wallet" });
+
+    // A difference past $3 means something else spent too: the rows count, at $0.10 each.
+    await clean();
+    tf.wallet = ["10.00", "4.00"];
+    tf.status = "populating";
+    tf.runStatus = "running";
+    const second = await newSearch();
+    await advance(env, second, at(0));
+    tf.rows = [ROW_A, ROW_B, ROW_C];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    await advance(env, second, at(11));
+    expect(await searchRow(second)).toMatchObject({ cost_usd: 0.3, cost_basis: "rows" });
+  });
+});
+
 describe("a search that does not finish", () => {
   it("fails with no companies when TinySet finds none", async () => {
     const id = await newSearch();
@@ -215,7 +252,9 @@ describe("a search that does not finish", () => {
       tf.rows.push(companyRow(`row-${i}`, { company: `Kitchen Tool ${i}`, round_type: "Seed", announcement_date: "2026-01-10", lead_investor: "Copperline Ventures", announcement_url: url }));
       tf.pages[url] = `Kitchen Tool ${i} raised a seed round led by Copperline Ventures.`;
     }
-    expect((await advance(env, id, at(11))).state).toBe("ready");
+    // Three checks a call: the five companies take two calls.
+    expect((await advance(env, id, at(11))).state).toBe("checking");
+    expect((await advance(env, id, at(12))).state).toBe("ready");
   });
 
   it("gives up on a run that takes too long, cancelling it", async () => {

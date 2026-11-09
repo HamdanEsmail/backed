@@ -16,6 +16,7 @@ import {
   DATASET_READ_EVERY_SECONDS,
   MIN_PROVED_TO_RANK,
   PRICES,
+  SEARCH_BUDGET_USD,
   SEARCH_TIMEOUT_MINUTES,
   TARGET_ROWS,
 } from "../core/limits";
@@ -118,7 +119,16 @@ async function start(env: Env, s: SearchRow, now: Date, did: string[]): Promise<
 // --- finding -------------------------------------------------------------------------------------
 
 /** The run has ended: book what it cost (once), free the slot, move on to checking. */
-async function endRun(env: Env, s: SearchRow, status: string, rowCount: number, problem: string | null, now: Date, did: string[]): Promise<void> {
+async function endRun(
+  env: Env,
+  s: SearchRow,
+  status: string,
+  rowCount: number,
+  billedRows: number,
+  problem: string | null,
+  now: Date,
+  did: string[],
+): Promise<void> {
   const moved = await env.DB.prepare(
     "UPDATE searches SET state = 'checking', dataset_status = ?, row_count = ?, failed_reason = ? WHERE id = ? AND state = 'finding'",
   )
@@ -136,11 +146,12 @@ async function endRun(env: Env, s: SearchRow, status: string, rowCount: number, 
     } catch {
       // counted from the rows
     }
-    // The wallet's difference is the cost while this key is Backed's alone. A difference above what
-    // the rows could cost at the rate card means something else spent too: then the rows count.
-    const byRows = Math.round(rowCount * PRICES.dataset_row * 1e6) / 1e6;
+    // The wallet's difference is the cost while this key is Backed's alone. A difference above the
+    // search's budget means something else spent too, and none means the bill has not landed: then
+    // the rows TinySet filled count, at the rate card.
+    const byRows = Math.round(billedRows * PRICES.dataset_row * 1e6) / 1e6;
     const diff = s.wallet_before_usd !== null && after !== null ? Math.round((s.wallet_before_usd - after) * 1e6) / 1e6 : null;
-    const useWallet = diff !== null && diff > 0 && diff <= byRows + 1e-9;
+    const useWallet = diff !== null && diff > 0 && diff <= SEARCH_BUDGET_USD + 1e-9;
     const cost = useWallet ? diff : byRows;
     await recordSpend(env.DB, "dataset_run", cost, s.id);
     await env.DB.prepare("UPDATE searches SET wallet_after_usd = ?, cost_usd = ?, cost_basis = ? WHERE id = ?")
@@ -178,11 +189,13 @@ async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<v
       .run();
     did.push(`read:${stored}`);
 
+    // The run is over when the dataset says so, or when the run itself has ended. A dataset that
+    // reads `empty` has no rows yet: that ends nothing while its run is still going.
     const runOver = ds.run !== null && (ds.run.status === "done" || ds.run.status === "failed" || ds.run.status === "cancelled");
-    if (ds.status === "ready" || ds.status === "empty" || ds.status === "failed" || ds.status === "cancelled" || (ds.status !== "populating" && runOver)) {
+    if (ds.status === "ready" || ds.status === "failed" || ds.status === "cancelled" || runOver) {
       const problem =
         ds.status === "failed" || ds.run?.status === "failed" ? "run_failed" : ds.status === "cancelled" || ds.run?.status === "cancelled" ? "run_cancelled" : null;
-      await endRun(env, s, ds.status, stored, problem, now, did);
+      await endRun(env, s, ds.status, stored, ds.rowCount, problem, now, did);
     } else if (minutesAgo(now, s.started_at) > SEARCH_TIMEOUT_MINUTES) {
       if (ds.run !== null) {
         try {
@@ -191,7 +204,7 @@ async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<v
           // The run is given up on either way; rows read so far are kept.
         }
       }
-      await endRun(env, s, "cancelled", stored, "timeout", now, did);
+      await endRun(env, s, "cancelled", stored, ds.rowCount, "timeout", now, did);
     }
   } catch (err) {
     if (!(err instanceof TinyFishError)) throw err;

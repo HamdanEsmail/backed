@@ -90,11 +90,23 @@ export function slugOf(name: string): string {
 
 // --- Finding a name in a sentence ---------------------------------------------------------------
 
-/** Words that make a sentence about money raised. A one-word name counts only in such a sentence.
- *  Beside led, participation, investors, backed, joined, round and funding: the forms of "raise"
- *  and "invest", and the names of the stages, which a headline such as "Kettle raises $4M seed" uses. */
-const FUNDING_WORDS =
-  /(?<![\p{L}\p{N}])(?:led|leads|co-led|colead|participation|participated|participating|investors?|investment|invested|investing|backed|backing|joined|round|rounds|funding|financing|raise|raises|raised|raising|seed|pre-seed|series)(?![\p{L}\p{N}])/iu;
+/**
+ * Words that make a sentence about money raised. A one-word investor counts only in such a
+ * sentence. Beside led, participation, investors, backed, joined, round and funding: the forms of
+ * "raise" and "invest", and the stages in their funding forms only ("seed round", "Series A"), so a
+ * sentence about planting seed or a TV series is not one.
+ */
+const FUNDING_WORDS = new RegExp(
+  "(?<![\\p{L}\\p{N}])(?:" +
+    [
+      "led", "leads", "co-led", "colead", "participation", "participated", "participating",
+      "investors?", "investment", "invested", "investing", "backed", "backing", "joined",
+      "round", "rounds", "funding", "financing", "raise", "raises", "raised", "raising",
+      "pre-seed", "seed[- ](?:rounds?|funding|financing|investment|stage)", "series[- ][a-d]",
+    ].join("|") +
+    ")(?![\\p{L}\\p{N}])",
+  "iu",
+);
 
 export function hasFundingWord(sentence: string): boolean {
   return FUNDING_WORDS.test(sentence);
@@ -111,38 +123,70 @@ export function foldAccents(text: string): string {
   return out;
 }
 
+/** Where on the page a sentence stands: the page's title, a heading, or running text. */
+export type SentenceKind = "title" | "heading" | "text";
+
+/** A sentence prepared once, then searched for every name. */
+export type Sentence = { text: string; folded: string; funding: boolean; kind: SentenceKind };
+
+export function prepareSentence(text: string, kind: SentenceKind = "text"): Sentence {
+  return { text, folded: foldAccents(text), funding: hasFundingWord(text), kind };
+}
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export type NameMatcher = {
   name: string;
   words: string[];
-  /** One word after the legal words are dropped: such a name needs its capital letter and a
-   *  funding sentence. */
+  /** One word after the legal words are dropped: such a name is also an ordinary word. */
   oneWord: boolean;
+  /** Written with a capital: then only a capitalised occurrence counts as a one-word name. */
+  needsCapital: boolean;
+  pattern: RegExp;
 };
 
+/** The name prepared once: its words and its pattern. Null for a name with no words left. */
 export function matcherFor(name: string): NameMatcher | null {
   const words = nameWords(name);
   if (words.length === 0) return null;
-  return { name, words, oneWord: words.length === 1 };
+  return {
+    name,
+    words,
+    oneWord: words.length === 1,
+    needsCapital: /\p{Lu}/u.test(name),
+    pattern: new RegExp(`(?<![\\p{L}\\p{N}])${words.map(escapeRe).join("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])`, "giu"),
+  };
+}
+
+export type Hit = { start: number; end: number };
+
+/**
+ * Every place the name stands in the sentence as a whole name: its words in order, separated only
+ * by spaces or punctuation, not inside a longer word, ignoring case and accents. A one-word name
+ * written with a capital counts only where the page writes it with one (a name written without one,
+ * such as "heytruffle", in any case).
+ */
+export function nameHits(sentence: Sentence, m: NameMatcher): Hit[] {
+  const hits: Hit[] = [];
+  m.pattern.lastIndex = 0;
+  for (let hit = m.pattern.exec(sentence.folded); hit !== null; hit = m.pattern.exec(sentence.folded)) {
+    if (m.oneWord && m.needsCapital && !/\p{Lu}/u.test(hit[0])) continue;
+    hits.push({ start: hit.index, end: hit.index + hit[0].length });
+  }
+  return hits;
 }
 
 /**
- * Where the name is in the sentence, or null. Found as a whole name: its words in order, separated
- * only by spaces or punctuation, not inside a longer word, ignoring case and accents. A one-word
- * name (Headline, True, Neo; a company called Kettle) is also an ordinary word, so it counts only
- * written with a capital letter (in any case when the name itself is written without one) and
- * only in a sentence with a funding word.
+ * Where an investor's name is in the sentence, or null. A one-word name (Headline, True, Neo) is
+ * also an ordinary word, so it counts only in a sentence with a funding word.
  */
-export function findName(sentence: string, m: NameMatcher): { start: number; end: number } | null {
-  const folded = foldAccents(sentence);
-  const re = new RegExp(`(?<![\\p{L}\\p{N}])${m.words.map(escapeRe).join("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])`, "giu");
-  if (m.oneWord && !hasFundingWord(sentence)) return null;
-  // A name written without a capital ("heytruffle") is a brand spelled that way: any case counts.
-  const needsCapital = /\p{Lu}/u.test(m.name);
-  for (let hit = re.exec(folded); hit !== null; hit = re.exec(folded)) {
-    if (m.oneWord && needsCapital && !/\p{Lu}/u.test(hit[0])) continue;
-    return { start: hit.index, end: hit.index + hit[0].length };
-  }
-  return null;
+export function findName(sentence: Sentence | string, m: NameMatcher): Hit | null {
+  const s = typeof sentence === "string" ? prepareSentence(sentence) : sentence;
+  if (m.oneWord && !s.funding) return null;
+  return nameHits(s, m)[0] ?? null;
+}
+
+/** True when the hit is the first word of its sentence (only punctuation before it). */
+export function startsSentence(sentence: Sentence, hit: Hit): boolean {
+  return !/[\p{L}\p{N}]/u.test(sentence.text.slice(0, hit.start));
 }

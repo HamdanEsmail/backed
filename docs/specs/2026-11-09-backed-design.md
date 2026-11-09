@@ -96,9 +96,14 @@ For one company row:
    An investor counts for this company only when the page names it. Generic entries ("angel investors",
    "existing investors", "others") are never investors.
    A name that is one ordinary word (real examples: Headline, True, Neo, Turbo, Aperture) would be "found" on
-   almost any page. Such a name counts only when it appears with its capital letter, as a whole word, inside a
-   sentence that also has a funding word (led, co-led, participation, participated, investors, backed, joined,
-   round, funding). The same rule applies to a one-word company name.
+   almost any page. Such an investor counts only when it appears with its capital letter, as a whole word, inside
+   a sentence that also has a funding word: led, co-led, participation, participated, investors, investment,
+   backed, joined, round, funding, financing, the forms of raise, and the stages in their funding forms only
+   ("pre-seed", "seed round", "seed funding", "Series A" to "Series D"; never a bare "seed" or "series").
+   A one-word company name is held to a looser rule, because an article about a company names it all through
+   while its funding sentence often says "the company": it counts when it appears with its capital letter as a
+   whole word in the title or a heading, in a funding sentence, or at least twice in the text where it is not
+   the first word of its sentence.
 4. For each named investor, the sentence that names it is cut from the page: back to the previous sentence end,
    forward to the next, trimmed to the clause around the name when it is long (about 170 characters), with "…"
    where it was cut. This is the quotation. The partner and the founders are kept only when the page names them.
