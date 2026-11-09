@@ -35,6 +35,8 @@ export type SearchRow = {
   finished_at: string | null;
   expires_at: string | null;
   ranked_at: string | null;
+  run_started_at: string | null;
+  run_finished_at: string | null;
 };
 
 export type CompanyRow = {

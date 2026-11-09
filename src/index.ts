@@ -4,6 +4,7 @@ import { runCron } from "./cron";
 import type { Env } from "./env";
 import { searchesRouter } from "./handlers/searches";
 import { statsRouter } from "./handlers/stats";
+import { notFound, siteRouter } from "./site/router";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -12,7 +13,11 @@ app.route("/", statsRouter);
 
 app.post("/api/admin/ping", adminOnly, (c) => c.json({ ok: true }));
 
-app.notFound((c) => c.json({ error: "not_found" }, 404));
+// The pages, last, so every API route keeps its answer. Static files (public/) are served before
+// the Worker runs at all.
+app.route("/", siteRouter);
+
+app.notFound(notFound);
 
 /** Every minute: expire old public searches and move unfinished ones forward. */
 async function scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {

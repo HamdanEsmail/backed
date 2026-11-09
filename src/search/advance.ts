@@ -192,8 +192,11 @@ async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<v
     const ds = await getDataset(env, s.dataset_id);
     const { rows, complete } = await listRows(env, s.dataset_id);
     const stored = await storeRows(env.DB, s.id, rows, complete, now);
-    await env.DB.prepare("UPDATE searches SET dataset_status = ?, row_count = ?, run_id = COALESCE(?, run_id) WHERE id = ?")
-      .bind(ds.status, stored, ds.run?.id ?? null, s.id)
+    await env.DB.prepare(
+      `UPDATE searches SET dataset_status = ?, row_count = ?, run_id = COALESCE(?, run_id),
+         run_started_at = COALESCE(?, run_started_at), run_finished_at = COALESCE(?, run_finished_at) WHERE id = ?`,
+    )
+      .bind(ds.status, stored, ds.run?.id ?? null, ds.run?.startedAt ?? null, ds.run?.finishedAt ?? null, s.id)
       .run();
     did.push(`read:${stored}`);
 

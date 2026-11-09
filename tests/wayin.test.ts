@@ -49,6 +49,11 @@ describe("an open door", () => {
     expect(pickDoor([`${SITE}careers/apply`, `${SITE}jobs/apply-now`, "https://accelerator.example/apply"], SITE)).toBe(null);
   });
 
+  it("never takes an article that mentions pitching for a door", () => {
+    expect(pickDoor([`${SITE}resources/master-classes/pitch-ready-how-to-tell-the-story`, `${SITE}blog/how-to-pitch`, `${SITE}news/contact-tracing-startup`], SITE)).toBe(null);
+    expect(pickDoor([`${SITE}founders/apply`, `${SITE}apply.html`], SITE)).toEqual({ url: `${SITE}founders/apply`, kind: "form" });
+  });
+
   it("prefers a published inbox on their own site meant for founders", () => {
     const texts = ["Write to ada@copperline.example or pitch@copperline.example. Logo: logo@2x.png. Press: news@agency.example"];
     expect(pickEmail(texts, [], SITE)).toBe("pitch@copperline.example");

@@ -19,8 +19,8 @@ describe("the Worker", () => {
     expect(slot.results).toEqual([{ id: 1, search_id: null, since: null }]);
   });
 
-  it("answers an unknown path with a JSON 404", async () => {
-    const res = await callWorker("/nowhere");
+  it("answers an unknown API path with a JSON 404", async () => {
+    const res = await callWorker("/api/nowhere");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not_found" });
   });

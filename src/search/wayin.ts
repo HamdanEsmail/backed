@@ -64,8 +64,13 @@ export function pickSite(hits: SearchHit[], name: string): string | null {
 
 /** Services founders' pitch forms are made with. A link to one is a form, whatever its address says. */
 const FORM_HOSTS = /(^|\.)(typeform\.com|forms\.gle|jotform\.com|tally\.so|airtable\.com|hsforms\.com|paperform\.co|fillout\.com|formstack\.com|cognitoforms\.com)$/i;
-const FORM_WORDS = /(^|[^a-z])(apply|application|pitch|pitches|submit|submission|founders-form|deal-?flow)([^a-z]|$)/i;
-const CONTACT_WORDS = /(^|[^a-z])(contact|contact-us|get-in-touch)([^a-z]|$)/i;
+/** A door is a page of its own near the top of their site, named for what it is: a path of at most
+ *  two parts, one of which says apply, pitch or submit (or contact). An article that mentions
+ *  pitching, deep in a blog or a resources section, is not a door. */
+const FORM_WORDS = /^(apply|apply-now|application|applications|pitch|pitch-us|pitchus|pitches|submit|submissions?|submit-a-deck|founders-form|deal-?flow|get-funded|funding-application)$/i;
+const CONTACT_WORDS = /^(contact|contact-us|contactus|get-in-touch)$/i;
+const NOT_A_SECTION = /^(blog|blogs|resources|news|insights|posts|articles?|podcasts?|events|library|learn|stories|perspectives|content)$/i;
+const MAX_DOOR_DEPTH = 2;
 /** Pages about jobs say "apply" too: never a door for a founder. */
 const NOT_A_DOOR = /(career|jobs?|hiring|vacanc|recruit|internship|press|media-kit|privacy|cookie|terms)/i;
 
@@ -91,8 +96,10 @@ export function pickDoor(links: string[], siteUrl: string): Door | null {
     const where = `${u.pathname}${u.search}`;
     if (NOT_A_DOOR.test(where)) continue;
     const onSite = siteBase(u.href) === own;
-    if (form === null && (FORM_HOSTS.test(u.hostname) || (onSite && FORM_WORDS.test(where)))) form = u.href;
-    if (contact === null && onSite && CONTACT_WORDS.test(where)) contact = u.href;
+    const parts = u.pathname.split("/").filter((p) => p !== "").map((p) => p.replace(/\.html?$/i, ""));
+    const shallow = parts.length <= MAX_DOOR_DEPTH && !parts.some((p) => NOT_A_SECTION.test(p));
+    if (form === null && (FORM_HOSTS.test(u.hostname) || (onSite && shallow && parts.some((p) => FORM_WORDS.test(p))))) form = u.href;
+    if (contact === null && onSite && shallow && parts.some((p) => CONTACT_WORDS.test(p))) contact = u.href;
   }
   if (form !== null) return { url: form, kind: "form" };
   if (contact !== null) return { url: contact, kind: "contact" };
@@ -169,7 +176,7 @@ export function warmRoute(deals: WarmDeal[]): WarmPerson[] {
 }
 
 const roundWords = (stage: Stage) => (stage === "pre-seed" || stage === "seed" ? `${STAGE_LABELS[stage].toLowerCase()} round` : `${STAGE_LABELS[stage]} round`);
-const possessive = (name: string) => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
+export const possessive = (name: string) => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
 
 /** The founder's line inside a sentence: lowercased at its start unless its first word is written
  *  as an acronym ("AI", "B2B"), and without a closing full stop. */
