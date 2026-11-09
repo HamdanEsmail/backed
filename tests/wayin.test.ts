@@ -29,7 +29,9 @@ describe("their site from a search", () => {
 
   it("takes the first result on a site of their own, by domain or title, and gives its home page", () => {
     expect(pickSite(hits, "Copperline Ventures")).toBe("https://copperline.example/");
-    expect(pickSite([{ url: "https://cv.example/about", title: "Copperline Ventures: seed fund", snippet: "" }], "Copperline Ventures")).toBe("https://cv.example/");
+    expect(pickSite([{ url: "https://copperlinevc.example/about", title: "Copperline Ventures: seed fund", snippet: "" }], "Copperline Ventures")).toBe("https://copperlinevc.example/");
+    // A page about them elsewhere, whose title starts with their name, is not their site.
+    expect(pickSite([{ url: "https://cv.example/about", title: "Copperline Ventures: seed fund", snippet: "" }], "Copperline Ventures")).toBe(null);
     // A domain that carries the name wins over an earlier result that only names them in its title.
     const later = [{ url: "https://news.example/jobs/copperline", title: "Copperline Ventures jobs", snippet: "" }, ...hits];
     expect(pickSite(later, "Copperline Ventures")).toBe("https://copperline.example/");

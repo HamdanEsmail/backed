@@ -36,8 +36,7 @@ export function siteBase(url: string): string | null {
 /**
  * Their site, from search results, on a site that is not a database, a social network or the press:
  * the first result whose domain carries the name, else the first whose title starts with the
- * investor's whole name. A title alone is weaker: news and data sites put the name in their titles
- * too. Its home page is the site.
+ * investor's whole name on a domain that starts with its first word. Its home page is the site.
  */
 export function pickSite(hits: SearchHit[], name: string): string | null {
   const m = matcherFor(name);
@@ -60,9 +59,10 @@ export function pickSite(hits: SearchHit[], name: string): string | null {
     // ("collidecap" for Collide Capital), never part of a word ("arden" for Ardenwood).
     const byDomain = compact.length >= 3 && (label.includes(compact) || (label.length >= Math.max(4, words[0]!.length) && compact.startsWith(label)));
     // A title counts when it starts with the name, as a site's own pages do ("Copperline Ventures:
-    // seed fund"); a news or partner page names them further in.
+    // seed fund"), on a domain that starts with the name's first word ("dsgcp" for DSG Consumer
+    // Partners). Pages about them elsewhere start their titles with the name too.
     const title = prepareSentence(hit.title);
-    const byTitle = nameHits(title, m).some((h) => startsSentence(title, h));
+    const byTitle = words[0]!.length >= 3 && label.startsWith(words[0]!) && nameHits(title, m).some((h) => startsSentence(title, h));
     if (byDomain) return `${u.protocol}//${u.host}/`;
     if (byTitle) byTitleOnly ??= `${u.protocol}//${u.host}/`;
   }
