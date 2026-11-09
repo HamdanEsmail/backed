@@ -22,6 +22,7 @@ import {
   READ_RETRY_AFTER_SECONDS,
   SEARCH_BUDGET_USD,
   SEARCH_TIMEOUT_MINUTES,
+  SETTLE_AFTER_MINUTES,
   TARGET_ROWS,
   WAY_IN_TOP,
   WAY_INS_PER_ADVANCE,
@@ -162,11 +163,51 @@ async function endRun(
     const useWallet = diff !== null && diff > 0 && diff <= SEARCH_BUDGET_USD + 1e-9;
     const cost = useWallet ? diff : byRows;
     await recordSpend(env.DB, "dataset_run", cost, s.id);
-    await env.DB.prepare("UPDATE searches SET wallet_after_usd = ?, cost_usd = ?, cost_basis = ? WHERE id = ?")
-      .bind(after, cost, useWallet ? "wallet" : "rows", s.id)
+    await env.DB.prepare("UPDATE searches SET wallet_after_usd = ?, cost_usd = ?, cost_basis = ?, run_booked_at = ? WHERE id = ?")
+      .bind(after, cost, useWallet ? "wallet" : "rows", now.toISOString(), s.id)
       .run();
   }
   await releaseSlot(env.DB, s.id);
+}
+
+/**
+ * Corrects a booked run cost once, SETTLE_AFTER_MINUTES after it was booked: part of a run can be
+ * billed after the wallet was read at its end. The wallet's whole difference since the run started
+ * replaces the booked cost when it is larger and within the budget. When a later run has started
+ * since, the late bill is in that run's difference, so nothing is changed. Returns the search
+ * settled, or null.
+ */
+export async function settleRunCost(env: Env, now: Date = new Date()): Promise<{ id: string; cost: number } | null> {
+  const due = new Date(now.getTime() - SETTLE_AFTER_MINUTES * 60_000).toISOString();
+  const s = await env.DB.prepare(
+    `UPDATE searches SET cost_settled_at = ? WHERE id = (
+       SELECT id FROM searches WHERE origin <> 'import' AND cost_basis IN ('wallet', 'rows') AND cost_settled_at IS NULL
+         AND COALESCE(run_booked_at, run_finished_at) <= ? ORDER BY COALESCE(run_booked_at, run_finished_at) LIMIT 1)
+     AND cost_settled_at IS NULL RETURNING *`,
+  )
+    .bind(now.toISOString(), due)
+    .first<SearchRow>();
+  if (s === null || s.wallet_before_usd === null) return null;
+  const booked = s.run_booked_at ?? s.run_finished_at!;
+  const later = await env.DB.prepare(
+    "SELECT 1 AS later FROM searches WHERE id <> ? AND origin <> 'import' AND dataset_id IS NOT NULL AND started_at > ? LIMIT 1",
+  )
+    .bind(s.id, booked)
+    .first<{ later: number }>();
+  if (later !== null) return { id: s.id, cost: s.cost_usd ?? 0 };
+  let balance: number;
+  try {
+    balance = await readBalance(env);
+  } catch {
+    return { id: s.id, cost: s.cost_usd ?? 0 };
+  }
+  const total = Math.round((s.wallet_before_usd - balance) * 1e6) / 1e6;
+  if (!(total > (s.cost_usd ?? 0) && total <= SEARCH_BUDGET_USD + 1e-9)) return { id: s.id, cost: s.cost_usd ?? 0 };
+  await env.DB.batch([
+    env.DB.prepare("UPDATE spend SET amount_usd = ? WHERE kind = 'dataset_run' AND ref = ?").bind(total, s.id),
+    env.DB.prepare("UPDATE searches SET cost_usd = ?, cost_basis = 'wallet' WHERE id = ?").bind(total, s.id),
+  ]);
+  return { id: s.id, cost: total };
 }
 
 async function find(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {

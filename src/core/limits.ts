@@ -77,6 +77,9 @@ export const PUBLIC_SEARCHES_PER_VISITOR_PER_DAY = 1;
 export const SEARCH_BUDGET_USD = 3;
 /** All paid work stops when the ledger, plus the budget of every unsettled run, reaches this. */
 export const SPEND_STOP_USD = 9;
+/** Part of a run can be billed after it ends. The wallet is read again this long after the run's
+ *  cost was booked, and the booked cost corrected once. */
+export const SETTLE_AFTER_MINUTES = 10;
 
 /** US dollars per unit, by ledger kind. */
 export const PRICES = {

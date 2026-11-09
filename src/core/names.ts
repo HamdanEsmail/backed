@@ -30,43 +30,59 @@ export function nameKey(name: string): string {
 }
 
 /** Entries in an investor cell that name nobody: "angel investors", "a group of angel investors",
- *  "existing investors", "others", "undisclosed". They are never investors. */
-const GENERIC = new RegExp(
-  "^(?:and )?(?:a |an |the )?(?:(?:group|number|couple|handful|host|range|syndicate) of )?" +
-    "(?:(?:several|various|other|others|some|few|many|multiple|existing|new|previous|returning|strategic|individual|private|" +
-    "undisclosed|unnamed|unknown|notable|prominent|high profile|well known|angel|business|local|international|" +
-    "institutional|family|additional|follow on|early|seed|tech|industry) )*" +
-    "(?:investors?|angels?|backers?|others|individuals|offices?|family offices?|vcs?|participants|" +
-    "undisclosed(?: .*)?|unknown)$",
-);
+ *  "existing investors", "others", "entrepreneurs", "undisclosed", and "angel investors from
+ *  Anthropic", which names an employer, not an investor. They are never investors. */
+const GENERIC_HEAD =
+  "^(?:and )?(?:a |an |the )?(?:(?:group|number|couple|handful|host|range|syndicate|network|collective) of )?" +
+  "(?:(?:several|various|other|others|some|few|many|multiple|existing|new|previous|returning|strategic|individual|private|" +
+  "undisclosed|unnamed|unknown|notable|prominent|high profile|well known|angel|business|local|international|" +
+  "institutional|family|additional|follow on|early|stage|seed|tech|industry|ecosystem|experienced|senior|leading|" +
+  "global|regional|serial|super) )*" +
+  "(?:investors?|angels?|backers?|others|individuals|offices?|family offices?|vcs?|participants|entrepreneurs|" +
+  "operators|founders|executives|leaders|advisors|advisers|mentors|friends|employees|alumni|insiders|" +
+  "undisclosed(?: .*)?|unknown)";
+const GENERIC = new RegExp(`${GENERIC_HEAD}$`);
+/** "angel investors from Anthropic", "executives at …", "founders of …", "angels including …". */
+const GENERIC_FROM = new RegExp(`${GENERIC_HEAD} (?:from|at|of|including|such as|across) `);
 
 export function isGeneric(name: string): boolean {
   const n = normalize(name);
-  return n === "" || n === "null" || n === "none" || n === "n a" || GENERIC.test(n);
+  return n === "" || n === "null" || n === "none" || n === "n a" || GENERIC.test(n) || GENERIC_FROM.test(n);
 }
 
 /**
  * Splits a cell of names. Real cells mix separators ("A, B; C"), add notes in brackets
  * ("A (lead)"), and end with "and" ("A, B and C"). A comma inside brackets does not split.
- * Generic entries and empty ones are dropped; a name listed twice is kept once.
+ * Generic entries and empty ones are dropped; a name listed twice is kept once. After "angel
+ * investors from A, B, C" the rest of that list, up to the next semicolon, names their employers,
+ * not investors, and is dropped too.
  */
 export function splitNames(cell: unknown): string[] {
   if (typeof cell !== "string") return [];
-  const parts: string[] = [];
+  const parts: { text: string; afterComma: boolean }[] = [];
   let depth = 0;
   let current = "";
+  let afterComma = false;
   for (const ch of cell) {
     if (ch === "(" || ch === "[") depth++;
     if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
     if (depth === 0 && (ch === ";" || ch === "," || ch === "\n")) {
-      parts.push(current);
+      parts.push({ text: current, afterComma });
       current = "";
+      afterComma = ch === ",";
     } else current += ch;
   }
-  parts.push(current);
+  parts.push({ text: current, afterComma });
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const raw of parts) {
+  let employers = false;
+  for (const { text: raw, afterComma: listed } of parts) {
+    if (!listed) employers = false;
+    if (employers) continue;
+    if (GENERIC_FROM.test(normalize(raw))) {
+      employers = true;
+      continue;
+    }
     const name = raw
       .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
       .replace(/^\s*(?:and|&)\s+/i, "")
@@ -154,7 +170,8 @@ export function matcherFor(name: string): NameMatcher | null {
     words,
     oneWord: words.length === 1,
     needsCapital: /\p{Lu}/u.test(name),
-    pattern: new RegExp(`(?<![\\p{L}\\p{N}])${words.map(escapeRe).join("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])`, "giu"),
+    // Words may also run together: pages write "DayOne Capital" for Day One Capital.
+    pattern: new RegExp(`(?<![\\p{L}\\p{N}])${words.map(escapeRe).join("[^\\p{L}\\p{N}]*")}(?![\\p{L}\\p{N}])`, "giu"),
   };
 }
 

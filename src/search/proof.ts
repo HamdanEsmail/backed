@@ -156,19 +156,24 @@ export function sentencesOf(text: string, title: string | null = null): string[]
 
 export type Found = { sentence: string; start: number; end: number };
 
-/** Where the page names `name`: the first sentence with a funding word that names it, else the
- *  first sentence that names it at all. Null when no sentence does. */
-export function findInPage(sentences: Sentence[], m: NameMatcher | null): Found | null {
+/** Where the page names `name`: the first funding sentence that also names the company, else the
+ *  first funding sentence that names it, else the first sentence that names it at all. Null when no
+ *  sentence does. A funding word alone can be a firm describing itself ("focused on backing…"). */
+export function findInPage(sentences: Sentence[], m: NameMatcher | null, company: NameMatcher | null = null): Found | null {
   if (m === null) return null;
+  let funding: Found | null = null;
   let first: Found | null = null;
   for (const sentence of sentences) {
     const hit = findName(sentence, m);
     if (hit === null) continue;
     const found = { sentence: sentence.text, ...hit };
-    if (sentence.funding) return found;
+    if (sentence.funding) {
+      if (company === null || nameHits(sentence, company).length > 0) return found;
+      funding ??= found;
+    }
     first ??= found;
   }
-  return first;
+  return funding ?? first;
 }
 
 /** Times a one-word company name must appear inside a sentence (not as its first word) to count
@@ -251,8 +256,8 @@ export function cutQuote(sentence: string, start: number, end: number, max: numb
 }
 
 /** The page's quotation for `name`, or null when the page does not name it. */
-export function quoteFor(sentences: Sentence[], name: string): string | null {
-  const found = findInPage(sentences, matcherFor(name));
+export function quoteFor(sentences: Sentence[], name: string, company: NameMatcher | null = null): string | null {
+  const found = findInPage(sentences, matcherFor(name), company);
   return found === null ? null : cutQuote(found.sentence, found.start, found.end);
 }
 
@@ -274,10 +279,11 @@ export function checkCompany(
   if (page === null || page.text.trim() === "") return { status: "set_apart", reason: "unreadable", investors: unnamed(f) };
 
   const sentences = pageSentences(page.text, page.title ?? null);
-  if (!companyNamed(sentences, matcherFor(f.name))) return { status: "set_apart", reason: "company_not_named", investors: unnamed(f) };
+  const company = matcherFor(f.name);
+  if (!companyNamed(sentences, company)) return { status: "set_apart", reason: "company_not_named", investors: unnamed(f) };
 
   const investors: CheckedInvestor[] = listedInvestors(f).map((i) => {
-    const quote = quoteFor(sentences, i.name);
+    const quote = quoteFor(sentences, i.name, company);
     return { ...i, named: quote !== null, quote };
   });
   if (!investors.some((i) => i.named)) return { status: "set_apart", reason: "no_investor_named", investors };

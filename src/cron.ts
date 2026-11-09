@@ -1,8 +1,9 @@
 // The job that runs every minute (wrangler.jsonc `* * * * *`): delete public searches past their
-// time, then move every unfinished search forward, so a search finishes even when nobody is
-// watching its page. Each step runs even when an earlier one fails.
+// time, move every unfinished search forward, so a search finishes even when nobody is watching
+// its page, then correct one run's booked cost from a later wallet read. Each step runs even when
+// an earlier one fails.
 import type { Env } from "./env";
-import { advance } from "./search/advance";
+import { advance, settleRunCost } from "./search/advance";
 
 /** Unfinished searches moved forward per minute, oldest first. */
 const ADVANCE_PER_RUN = 5;
@@ -41,6 +42,11 @@ export async function runCron(env: Env, now: Date = new Date()): Promise<CronRes
     } catch {
       out.failed_steps.push(`advance:${id}`);
     }
+  }
+  try {
+    await settleRunCost(env, now);
+  } catch {
+    out.failed_steps.push("settle");
   }
   if (out.failed_steps.length > 0) console.warn("cron", JSON.stringify(out));
   return out;

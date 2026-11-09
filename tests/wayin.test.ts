@@ -35,6 +35,9 @@ describe("their site from a search", () => {
   it("finds none when only databases, networks and the press name them", () => {
     expect(pickSite(hits.slice(0, 2), "Copperline Ventures")).toBe(null);
     expect(pickSite([{ url: "https://techcrunch.com/x", title: "Copperline Ventures raises a fund", snippet: "" }], "Copperline Ventures")).toBe(null);
+    // Data vendors and startup directories carry the name in their titles too.
+    expect(pickSite([{ url: "https://www.preqin.com/data/profile/fund-manager/copperline-ventures/1", title: "Copperline Ventures - Preqin", snippet: "" }], "Copperline Ventures")).toBe(null);
+    expect(pickSite([{ url: "https://www.startuplist.africa/investors/copperline", title: "Copperline Ventures | Startup List Africa", snippet: "" }], "Copperline Ventures")).toBe(null);
   });
 });
 

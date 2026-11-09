@@ -16,7 +16,7 @@ import { longDate, monthYear } from "./spec";
 
 /** Sites that are about investors, not theirs: a search result there is never "their site". */
 const NOT_THEIR_SITE =
-  /(^|\.)(crunchbase|linkedin|pitchbook|wikipedia|twitter|x|facebook|instagram|youtube|medium|techcrunch|bloomberg|forbes|reuters|cbinsights|tracxn|dealroom|wellfound|angel|signal\.nfx|f6s|golden|zoominfo|owler|craft|glassdoor|github|substack|businesswire|prnewswire|globenewswire|eu-startups|tech|sifted|venturebeat|axios|wsj|ft|nytimes)\.[a-z.]+$/i;
+  /(^|\.)(crunchbase|linkedin|pitchbook|wikipedia|twitter|x|facebook|instagram|youtube|medium|techcrunch|bloomberg|forbes|reuters|cbinsights|tracxn|dealroom|wellfound|angel|signal\.nfx|f6s|golden|zoominfo|owler|craft|glassdoor|github|substack|businesswire|prnewswire|globenewswire|eu-startups|tech|sifted|venturebeat|axios|wsj|ft|nytimes|preqin|startuplist|openvc|gust|magnitt|wamda|techcabal|disrupt-africa|weetracker|theorg|rocketreach|apollo|vcsheet|seedtable|pehub|globalventuring|privateequityinternational|businessinsider|yahoo)\.[a-z.]+$/i;
 
 /** The part of a host name that names the organisation: "www.copperline.vc" -> "copperline.vc",
  *  "news.bbc.co.uk" -> "bbc.co.uk". */

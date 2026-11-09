@@ -90,6 +90,16 @@ describe("checkCompany", () => {
     expect(checkCompany(facts({ company: "Larder Loop Kitchens Group" }), WINDOW, [...STAGES], { text: other }).status).toBe("set_apart");
   });
 
+  it("finds a name whose words the page runs together, and quotes the sentence about the round", () => {
+    const text = [
+      "Day Harbour Capital is a Lisbon venture firm focused on backing founders in southern Europe.",
+      "Larder Loop raised a seed round led by DayHarbour Capital.",
+    ].join(" ");
+    const r = checkCompany(facts({ lead_investor: "Day Harbour Capital", other_investors: null }), WINDOW, [...STAGES], { text });
+    expect(r.status).toBe("proved");
+    expect(r.investors[0]!.quote).toBe("Larder Loop raised a seed round led by DayHarbour Capital.");
+  });
+
   it("does not count an investor that is only part of a longer name", () => {
     const text = "Larder Loop raised a seed round led by Copperline Ventures Europe and Northgate Seed Funding Partners.";
     const r = checkCompany(facts(), WINDOW, [...STAGES], { text });
@@ -172,6 +182,15 @@ describe("investor cells", () => {
     expect(splitNames("A group of angel investors; existing investors; Undisclosed investors; Others; Wexley & Co; wexley & co")).toEqual(["Wexley & Co"]);
     expect(splitNames("Fund One, Fund Two, and Fund Three")).toEqual(["Fund One", "Fund Two", "Fund Three"]);
     expect(splitNames(null)).toEqual([]);
+  });
+
+  it("drops people named by what they are, and the employers after 'angel investors from'", () => {
+    expect(splitNames("Quayle Capital; angel investors from Bramblework, Ostrander, and Pellucid Labs; Fenwick Fund")).toEqual([
+      "Quayle Capital",
+      "Fenwick Fund",
+    ]);
+    expect(splitNames("Angel investors; entrepreneurs; operators; early-stage ecosystem participants; executives at Bramblework")).toEqual([]);
+    expect(splitNames("Founders Fund; Operator Collective")).toEqual(["Founders Fund", "Operator Collective"]);
   });
 
   it("reads round types as stages", () => {

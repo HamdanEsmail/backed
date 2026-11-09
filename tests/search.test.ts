@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { recordSpend } from "../src/core/spend";
 import { runCron } from "../src/cron";
-import { advance } from "../src/search/advance";
+import { advance, settleRunCost } from "../src/search/advance";
 import { importSearch, startAdminSearch } from "../src/search/create";
 import { readSearch } from "../src/search/read";
 import { readSlot } from "../src/search/slot";
@@ -270,6 +270,42 @@ describe("the run's end and its cost", () => {
     tf.runStatus = "done";
     await advance(env, second, at(11));
     expect(await searchRow(second)).toMatchObject({ cost_usd: 0.3, cost_basis: "rows" });
+  });
+
+  it("corrects the booked cost once from a later wallet read, unless a later run has started", async () => {
+    // Booked at $0.50 when the run ended; $0.60 more was billed after that read.
+    const id = await newSearch();
+    tf.wallet = ["10.00", "9.50", "8.90"];
+    await advance(env, id, at(0));
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    await advance(env, id, at(11));
+    expect(await searchRow(id)).toMatchObject({ cost_usd: 0.5 });
+    expect(await settleRunCost(env, at(11 + 5 * 60))).toBeNull();
+    expect(await settleRunCost(env, at(11 + 10 * 60))).toEqual({ id, cost: 1.1 });
+    expect(await searchRow(id)).toMatchObject({ cost_usd: 1.1, cost_basis: "wallet" });
+    const runs = await env.DB.prepare("SELECT amount_usd FROM spend WHERE kind = 'dataset_run'").all();
+    expect(runs.results).toEqual([{ amount_usd: 1.1 }]);
+    expect(await settleRunCost(env, at(11 + 20 * 60))).toBeNull();
+
+    // A run started since: its own difference holds the late bill, so the first is left as booked.
+    await clean();
+    tf.wallet = ["10.00", "9.50", "9.50", "8.90"];
+    tf.status = "populating";
+    tf.runStatus = "running";
+    const first = await newSearch();
+    await advance(env, first, at(0));
+    tf.rows = [ROW_A];
+    tf.status = "ready";
+    tf.runStatus = "done";
+    await advance(env, first, at(11));
+    const next = await newSearch(at(20));
+    tf.status = "populating";
+    tf.runStatus = "running";
+    await advance(env, next, at(30));
+    expect(await settleRunCost(env, at(11 + 10 * 60))).toEqual({ id: first, cost: 0.5 });
+    expect(await searchRow(first)).toMatchObject({ cost_usd: 0.5 });
   });
 });
 
