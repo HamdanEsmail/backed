@@ -189,8 +189,9 @@ that timed out once may answer the next time, and the other way round.
 
 ## Paid calls
 
-TinySet runs are the only paid calls. Each is booked when the run ends, from the wallet difference, and settled
-from a second wallet read ten minutes later. Fetch, Search and the wallet read are free and booked at $0 per
+TinySet runs and Monitor runs are the paid calls. A TinySet run is booked when it ends, from the wallet
+difference, and settled from a second wallet read ten minutes later; a Monitor run is booked at its rate when it
+is created or delivered. Fetch, Search and the wallet read are free and booked at $0 per
 call. Checking and ranking the two searches again cost nothing.
 
 | When | What | Cost |
