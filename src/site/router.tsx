@@ -136,16 +136,22 @@ siteRouter.get("/searches", async (c) => {
   return render(c, <SavedPage rows={rows} />);
 });
 
-siteRouter.get("/score", async (c) => (siteEnabled(c.env) ? render(c, <ScorePage saved={await savedCount(c.env.DB)} />) : notFound(c)));
+// The score, the API and how it works each show something real from the search the home shows.
+
+siteRouter.get("/score", async (c) => {
+  if (!siteEnabled(c.env)) return notFound(c);
+  const [shown, saved] = await Promise.all([featured(c.env.DB), savedCount(c.env.DB)]);
+  return render(c, <ScorePage saved={saved} example={shown?.view ?? null} />);
+});
 
 siteRouter.get("/api", async (c) => {
   if (!siteEnabled(c.env)) return notFound(c);
-  const [rows, saved] = await Promise.all([listSearches(c.env.DB, 1), savedCount(c.env.DB)]);
-  return render(c, <ApiPage base={base(c.env)} sampleId={rows[0]?.id ?? null} saved={saved} />);
+  const [shown, saved] = await Promise.all([featured(c.env.DB), savedCount(c.env.DB)]);
+  return render(c, <ApiPage base={base(c.env)} saved={saved} example={shown?.view ?? null} />);
 });
 
 siteRouter.get("/about", async (c) => {
   if (!siteEnabled(c.env)) return notFound(c);
-  const [stats, saved] = await Promise.all([readStats(c.env.DB), savedCount(c.env.DB)]);
-  return render(c, <AboutPage stats={stats} saved={saved} />);
+  const [stats, shown, saved] = await Promise.all([readStats(c.env.DB), featured(c.env.DB), savedCount(c.env.DB)]);
+  return render(c, <AboutPage stats={stats} saved={saved} example={shown?.view ?? null} />);
 });

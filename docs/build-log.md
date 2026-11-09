@@ -218,6 +218,28 @@ test that failed before the fix.
 
 159 tests, 8 of them new.
 
+## The other pages, rebuilt on 10 November
+
+The home and a search's page looked like one product. How it works, the score, the API and the saved searches
+did not: each was a narrow column of small text on an empty orange field. Worse, no page linked to how it works
+or to the score, so the page that says how TinyFish is used could only be reached by typing its address.
+
+- **Every page now opens as the home does.** The stage holds the page's one line, and one word at the wordmark's
+  size starts on the stage and ends on the page: proved, scored, served, stored.
+- **Each page shows something real from a stored search.** How it works follows one match from TinySet's row to
+  the sentence Fetch read to its points, then lists the rows the check set apart, with the reason. The score
+  counts one investor out and adds up the first five. The API prints the first investor as the API answers it.
+- **The four TinyFish services are set like the ranked list**: the name large, the calls so far opposite, what
+  the service does under it, with the ledger's own figures.
+- **A saved search is a full-width band** with its line large and its figures under it, the three fields in turn.
+- **The menu reaches every page.** On the home, "How it works" and "The score" still go to the home's own
+  sections, and each section now leads on to its page; everywhere else they go to the pages.
+- **Small things**: the footer names Monitor with the other three services; a figure such as $0.015 is no longer
+  rounded to $0.01; on a phone, the last step no longer touches the dark band under it; a link on a white field
+  shows its focus ring in ink.
+
+No script was added and nothing is read from TinyFish to draw these pages. 164 tests.
+
 ## Paid calls
 
 TinySet runs and Monitor runs are the paid calls. A TinySet run is booked when it ends, from the wallet

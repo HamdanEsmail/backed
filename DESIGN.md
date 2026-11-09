@@ -8,7 +8,8 @@ every other screen.
 
 The founder's own one line is the fixed half of the screen. Everything that scrolls past it is an answer to it.
 The proof is always a sentence: the announcement's own words, with the investor's name highlighted in it. The name
-of the product crosses from the dark stage onto the orange page, once, on the first screen.
+of the product crosses from the dark stage onto the orange page, once, on the first screen. Every other page
+opens the same way with its own word: proved, scored, served, stored.
 
 ## Colour
 
@@ -37,7 +38,7 @@ licence allows redistributing them in a public repository. Five sizes and no oth
 | body | 17 to 19px | running text, sums, buttons |
 | lead | 20 to 26px | quotations, the supporting sentence, small headings |
 | head | 32 to 64px | names of investors, the founder's line, figures, section headings |
-| mark | 20.4vw | the wordmark and the footer crop only |
+| mark | 20.4vw | the wordmark, the one word that opens each other page, and the footer crop only |
 
 Display sizes: tracking -0.03 to -0.045em, leading 1 to 1.1. Text: leading 1.45, tracking -0.01em. Tabular figures
 wherever numbers line up. Every heading fits in two lines at every width; cut words before lowering the size.
@@ -75,6 +76,23 @@ told apart by a change of field colour or by space. One button shape: a flat fil
 - **The plain ask.** One sentence and one button on a nearly empty orange screen.
 - **The footer.** Left half a blue-black crop with "led by whom?" at the mark size, cut by the edges; right half
   the menu at the head size, two short notes, and the legal line.
+
+## The other pages
+
+How it works, the score, the API and the saved searches are built from the same pieces, never from a plain
+column of text.
+
+- **The opening.** The stage holds the page's one line as its heading (no label above it), one orange button and
+  three figures at its foot. Beside it, the supporting sentence and one word at the mark size that starts 6.4vw
+  inside the stage, orange there and ink on the page, as the wordmark does on the home.
+- **Something real.** Each page shows a piece of a stored search, not a description of one: a match followed
+  from TinySet's row to the page's sentence to its points; one investor counted out and the first five added up;
+  the first investor as the API answers it.
+- **Names with a figure opposite.** The four TinyFish services with their calls, and the API's addresses, are set
+  as the other investors are: the name at the head size, the figure on the same baseline, one line under it.
+- **A closing field.** The rows the check set apart and the limits on white; the score sheet on blue-black.
+- **The bands.** A saved search is one full-width band: its line at the head size (at the lead size on a phone,
+  or when it runs past 80 characters), its figures under it. The bands take the three fields in turn.
 
 ## Voice
 

@@ -20,7 +20,7 @@ export function ReadStage(props: { view: SearchView }) {
   const { search, figures } = props.view;
   const running = search.state !== "ready" && search.state !== "failed";
   return (
-    <div class="stage">
+    <div class="stage" data-ui>
       <div>
         <p class="label">The line searched</p>
         <p class="line">{search.line}</p>

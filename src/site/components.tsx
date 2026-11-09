@@ -34,7 +34,7 @@ export function Quote(props: { text: string | null; name: string }) {
 }
 
 /** "backed it 3 + a seed round, your stage 2 + … = 7" */
-function Sum(props: { deal: DealView; country: string }) {
+export function Sum(props: { deal: DealView; country: string }) {
   const stage = roundStage(props.deal.round_type);
   return (
     <p class="sum">
@@ -166,7 +166,7 @@ export function WayIn(props: { inv: InvestorView }) {
 export function FirstSheet(props: { inv: InvestorView; total: number; view: SearchView; href: string | null; children?: Child }) {
   const { inv, view } = props;
   return (
-    <article class="first">
+    <article class="first" data-ui>
       <div class="score">
         <h2>{props.href !== null ? <a href={props.href}>{inv.name}</a> : inv.name}</h2>
         <p class="n num">{inv.score}</p>
@@ -289,7 +289,7 @@ export function StageForm(props: {
   tally: { found: number; proved: number; investors: number; since: string } | null;
 }) {
   return (
-    <form class="stage" method="post" action="/search">
+    <form class="stage" method="post" action="/search" data-ui>
       <div>
         <label for="line">Your startup, in one line</label>
         <textarea id="line" name="line" rows={3} minlength={20} maxlength={140} spellcheck={false} required placeholder="What you build, and for whom">

@@ -68,10 +68,10 @@ export function Footer(props: { saved: number }) {
             <a href="/#the-list">The list</a>
           </li>
           <li>
-            <a href="/#how">How it works</a>
+            <a href="/about">How it works</a>
           </li>
           <li>
-            <a href="/#score">The score</a>
+            <a href="/score">The score</a>
           </li>
           <li>
             <a href="/searches">Saved searches</a>
@@ -89,24 +89,24 @@ export function Footer(props: { saved: number }) {
           <p>Every list downloads as CSV and JSON, with the proof link and the quoted sentence in each row.</p>
         </div>
         <p class="legal">
-          Built by Hamdan Esmail for the TinyFish Funding Radar bounty. Backed reads public funding announcements with TinyFish TinySet, Fetch and Search. It
-          is a starting list, not investment advice.
+          Built by Hamdan Esmail for the TinyFish Funding Radar bounty. Backed reads public funding announcements with TinyFish TinySet, Fetch, Search and
+          Monitor. It is a starting list, not investment advice.
         </p>
       </div>
     </footer>
   );
 }
 
-/** The navigation at the top of the column. `here` is the page's own address for the first link. */
+/** The navigation at the top of the column. On the home, "How it works" and "The score" go to the
+ *  home's own sections, which lead on to their pages; everywhere else they go to the pages. */
 export function Nav(props: { home: boolean; className: string }) {
-  const at = (hash: string) => (props.home ? hash : `/${hash}`);
   return (
     <nav class={props.className} aria-label="Main">
-      <a href={at("#the-list")} class="keep">
+      <a href={props.home ? "#the-list" : "/#the-list"} class="keep">
         The list
       </a>
-      <a href={at("#how")}>How it works</a>
-      <a href={at("#score")}>The score</a>
+      <a href={props.home ? "#how" : "/about"}>How it works</a>
+      <a href={props.home ? "#score" : "/score"}>The score</a>
       <a href="/api">API</a>
       <a href={props.home ? "#try" : "/#line"} class="act">
         Try your startup

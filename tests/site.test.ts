@@ -65,7 +65,7 @@ describe("the site", () => {
     const { res, html } = await page("/");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-security-policy")).toContain("style-src 'self' https://api.fontshare.com");
-    expect(html).toContain('<form class="stage" method="post" action="/search">');
+    expect(html).toContain('<form class="stage" method="post" action="/search"');
     expect(html).toContain('name="stage"');
     expect(html).not.toContain("<script");
   });
@@ -77,6 +77,61 @@ describe("the site", () => {
     expect(html).toContain("Copperline Ventures");
     expect(html).toContain("<mark>Copperline Ventures</mark>");
     expect(html).toContain("You led Larder Loop&#39;s seed round in June 2026");
+  });
+
+  it("leads from the home to how it works and the score, and names them in every page's menu", async () => {
+    await readySearch();
+    const home = (await page("/")).html;
+    expect(home).toContain('<a href="/about">One match followed through');
+    expect(home).toContain('<a href="/score">How the order is set</a>');
+    expect(home).toContain('<a href="#how">How it works</a>');
+    for (const path of ["/about", "/score", "/api", "/searches"]) {
+      const { res, html } = await page(path);
+      expect(res.status).toBe(200);
+      expect(html).toContain('<a href="/about">How it works</a>');
+      expect(html).toContain('<a href="/score">The score</a>');
+      expect(html).not.toContain("<script");
+    }
+  });
+
+  it("says how it works: the four TinyFish services with the ledger's figures, and one match followed through", async () => {
+    await readySearch();
+    const { html } = await page("/about");
+    for (const name of ["TinySet", "Fetch", "Search", "Monitor"]) expect(html).toContain(`<h3>${name}</h3>`);
+    expect(html).toContain("<span>search stored, free to open</span>");
+    expect(html).toContain("One match, followed from TinySet&#39;s row to its points");
+    expect(html).toContain("Lead investor: Copperline Ventures.");
+    expect(html).toContain("<mark>Copperline Ventures</mark>");
+    expect(html).toContain("backed it <b>3</b>");
+  });
+
+  it("counts one investor out on the score's page, and shows a real answer on the API's", async () => {
+    const id = await readySearch();
+    const score = (await page("/score")).html;
+    expect(score).toContain("A sum you can check.");
+    expect(score).toContain("counted out");
+    expect(score).toContain(`/searches/${id}/investors/copperline-ventures`);
+    const api = (await page("/api")).html;
+    expect(api).toContain(`/api/searches/${id}`);
+    expect(api).toContain("&quot;name&quot;: &quot;Copperline Ventures&quot;");
+    expect(api).toContain("&quot;points&quot;");
+  });
+
+  it("lists each saved search as a band with its figures, and says so when there is none", async () => {
+    expect((await page("/searches")).html).toContain("No search has finished yet.");
+    const id = await readySearch();
+    const { html } = await page("/searches");
+    expect(html).toContain(`<a href="/searches/${id}">${INPUT.line}</a>`);
+    expect(html).toContain("first <b>Copperline Ventures</b>");
+    expect(html).toContain("1 company proved by its own announcement.");
+  });
+
+  it("shows the other pages with nothing stored yet", async () => {
+    for (const path of ["/about", "/score", "/api"]) {
+      const { res, html } = await page(path);
+      expect(res.status).toBe(200);
+      expect(html).not.toContain("undefined");
+    }
   });
 
   it("keeps what was typed and says why when the form is refused", async () => {

@@ -67,18 +67,27 @@ function Steps(props: { since: string | null }) {
           <p>Every point is shown beside the sentence that earned it, so you can argue with the order.</p>
         </li>
       </ol>
+      <p class="more">
+        <a href="/about">One match followed through, and the TinyFish calls counted</a>
+      </p>
     </section>
   );
 }
 
-export function ScoreSheet() {
+/** The score as a printed sheet. On the home, `more` adds the way to the page that explains the order. */
+export function ScoreSheet(props: { more?: boolean }) {
   return (
     <section class="sheet-band" id="score">
       <div class="claim">
         <h2>No points for fame.</h2>
         <p>Only for backing companies like yours, with the sentence that proves it.</p>
+        {props.more ? (
+          <p class="more">
+            <a href="/score">How the order is set</a>
+          </p>
+        ) : null}
       </div>
-      <div class="sheet">
+      <div class="sheet" data-ui>
         <h2>The score</h2>
         <p class="note">Counted once for every company like yours that an investor backed.</p>
         <h3>For the company</h3>
@@ -150,7 +159,7 @@ function Mosaic(props: { view: SearchView; minutes: HomeProps["minutes"] }) {
   const shown = [...best.names].sort((a, b) => Number(b.role === "lead") - Number(a.role === "lead")).slice(0, 3);
   return (
     <section class="mosaic">
-      <div class="page">
+      <div class="page" data-ui>
         <p class="where">
           {host(page.page_url ?? page.announcement_url)}, {shortDate(page.announced_on)}
           {page.read_at !== null ? `, read ${shortDate(page.read_at)}` : ""}
@@ -208,14 +217,14 @@ export function Home(props: HomeProps) {
             <p class="say">Type one line about your startup. Backed finds who funded companies like it, and quotes the proof.</p>
             <h1 class="wordmark">backed</h1>
             <div class="wordmark-over" aria-hidden="true">
-              <span></span>
+              <span data-word="backed"></span>
             </div>
           </header>
           {v !== null ? <List view={v} /> : null}
           <Steps since={v?.search.window_start ?? null} />
         </div>
       </div>
-      <ScoreSheet />
+      <ScoreSheet more />
       {v !== null ? <Names companies={v.companies} title="Every company it found for this line" /> : null}
       {v !== null ? <Mosaic view={v} minutes={props.minutes} /> : null}
       <section class="ask" id="try">
