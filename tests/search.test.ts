@@ -105,9 +105,16 @@ describe("a search from queued to ready", () => {
     tf.runStatus = "done";
     tf.rows = [ROW_A, ROW_B_CHANGED, ROW_C];
     const third = await advance(env, id, at(22));
-    expect(third.did).toEqual(["read:3", "run_ended:ready", "proved:Shelfcount", "set_apart:Pantrywise", "ranking", "ready:2"]);
+    expect(third.did).toEqual(["read:3", "run_ended:ready", "proved:Shelfcount", "set_apart:Pantrywise",
+      "ranking",
+      "ranked:2",
+      "way_in:copperline ventures",
+      "way_in:northgate seed fund",
+      "ready",
+    ]);
     expect(third.state).toBe("ready");
-    expect(tf.reads).toEqual({ [URL_A]: 1, [URL_B]: 2 });
+    // The two announcements, the second twice; then Copperline's own site, from the row.
+    expect(tf.reads).toEqual({ [URL_A]: 1, [URL_B]: 2, "https://copperline.example/": 1 });
 
     // The cost is the wallet's difference, booked once, and the slot is free again.
     const s = await searchRow(id);
@@ -131,6 +138,19 @@ describe("a search from queued to ready", () => {
     expect(copper.deals[0]!.partner).toBe("Tobias Quell");
     expect(copper.deals[0]!.parts.map((p) => p.part)).toEqual(["backed", "led", "same_stage", "same_country", "recent"]);
     expect(copper.site_hint).toBe("https://copperline.example/");
+    // The way in: the row's site could not be read; the warm route and the first line come from the
+    // led deal's announcement.
+    expect(copper.way_in).toMatchObject({ site_source: "row", door: { kind: "unread", text: "Their site could not be read." }, cheque_text: "Cheque size not stated on their site." });
+    expect(copper.warm_route).toEqual([
+      { name: "Tobias Quell", role: "partner", company: "Larder Loop" },
+      { name: "Mira Odhiambo", role: "founder", company: "Larder Loop" },
+    ]);
+    expect(copper.first_line).toBe(
+      "You led Larder Loop's seed round in June 2026; we are building pantry planning software for school kitchens at the same stage.",
+    );
+    const north = view.investors[1]!;
+    expect(north.way_in).toMatchObject({ site_source: "none", door: { kind: "no_site" } });
+    expect(north.deals.find((d) => d.led)?.partner_note).toBe("The announcement names no partner.");
     expect(view.companies.find((c) => c.name === "Pantrywise")).toMatchObject({ state: "set_apart", set_apart_reason: "no_url" });
     expect(view.search.notice).toBe("Only 2 companies like this were proved. The list is thin: read it as a start.");
 

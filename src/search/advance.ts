@@ -7,18 +7,22 @@
 //                         stored; when the run ends, its cost is booked and the slot freed.
 //   finding, checking     companies are checked against their announcements, a few per call.
 //   checking -> ranking   every company is checked.
-//   ranking  -> ready     the investors are scored and the order stored.
+//   ranking  -> ready     the investors are scored and the order stored; then the way in is looked
+//                         up for the top investors, a few per call.
 //   any      -> failed    TinySet would not start, found nothing, or ended badly with fewer than
 //                         MIN_PROVED_TO_RANK companies proved.
 import {
   ADVANCE_BUDGET_MS,
   CHECKS_PER_ADVANCE,
+  CHECK_CLAIM_STALE_MINUTES,
   DATASET_READ_EVERY_SECONDS,
   MIN_PROVED_TO_RANK,
   PRICES,
   SEARCH_BUDGET_USD,
   SEARCH_TIMEOUT_MINUTES,
   TARGET_ROWS,
+  WAY_IN_TOP,
+  WAY_INS_PER_ADVANCE,
 } from "../core/limits";
 import { recordSpend } from "../core/spend";
 import { stageOfRound } from "../core/stages";
@@ -31,6 +35,7 @@ import { spendStopReached } from "./money";
 import { checkCompany, precheck } from "./proof";
 import { rank, type RankCompany } from "./score";
 import { releaseSlot, takeSlot } from "./slot";
+import { lookUpInvestor, reuseBefore } from "./wayin";
 import {
   claimCompany,
   companyCounts,
@@ -288,8 +293,8 @@ export async function rankInput(db: D1Database, searchId: string): Promise<RankC
 
 const rankStage = (c: CompanyRow) => stageOfRound(c.round_type)!;
 
-/** Scores the investors and stores the order and every part. Safe to run twice: it writes the
- *  same rows. */
+/** Scores the investors and stores the order and every part, once: the batch ends by setting
+ *  `ranked_at`, and two at once write the same rows. */
 async function rankSearch(env: Env, s: SearchRow, now: Date, did: string[]): Promise<void> {
   const ranked = rank(await rankInput(env.DB, s.id), { stage: s.stage, country: s.country }, now);
   const statements: D1PreparedStatement[] = [
@@ -315,10 +320,56 @@ async function rankSearch(env: Env, s: SearchRow, now: Date, did: string[]): Pro
     }
   }
   statements.push(
-    env.DB.prepare("UPDATE searches SET state = 'ready', finished_at = ? WHERE id = ? AND state = 'ranking'").bind(now.toISOString(), s.id),
+    env.DB.prepare("UPDATE searches SET ranked_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NULL").bind(now.toISOString(), s.id),
   );
   const results = await env.DB.batch(statements);
-  if ((results[results.length - 1]?.meta.changes ?? 0) === 1) did.push(`ready:${ranked.length}`);
+  if ((results[results.length - 1]?.meta.changes ?? 0) === 1) did.push(`ranked:${ranked.length}`);
+}
+
+/** The top investors whose way in is not looked up (or is older than the reuse window). */
+async function waysInToDo(env: Env, s: SearchRow, now: Date): Promise<{ investor_key: string; site_hint: string | null }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT r.investor_key, r.site_hint FROM ranking r LEFT JOIN investors i ON i.investor_key = r.investor_key
+     WHERE r.search_id = ? AND r.position <= ?
+       AND (i.investor_key IS NULL OR i.state <> 'done' OR i.looked_up_at < ?)
+     ORDER BY r.position`,
+  )
+    .bind(s.id, WAY_IN_TOP, reuseBefore(now))
+    .all<{ investor_key: string; site_hint: string | null }>();
+  return results;
+}
+
+/**
+ * The way in for the top WAY_IN_TOP investors, a few per call while the call is inside its time
+ * budget. Each lookup is stored per investor and reused by every search for 30 days. When none is
+ * left to do, the search is ready.
+ */
+async function waysIn(env: Env, s: SearchRow, now: Date, startedMs: number, did: string[]): Promise<void> {
+  const todo = await waysInToDo(env, s, now);
+  if (todo.length > 0) {
+    await env.DB.batch(
+      todo.map((t) =>
+        env.DB.prepare("INSERT INTO investors (investor_key, name, state) SELECT investor_key, name, 'pending' FROM ranking WHERE search_id = ? AND investor_key = ? ON CONFLICT (investor_key) DO NOTHING").bind(
+          s.id,
+          t.investor_key,
+        ),
+      ),
+    );
+    const staleBefore = new Date(now.getTime() - CHECK_CLAIM_STALE_MINUTES * 60_000).toISOString();
+    let looked = 0;
+    for (const t of todo) {
+      if (looked >= WAY_INS_PER_ADVANCE || Date.now() - startedMs >= ADVANCE_BUDGET_MS) return;
+      if (await lookUpInvestor(env, t.investor_key, t.site_hint, now, staleBefore)) {
+        looked++;
+        did.push(`way_in:${t.investor_key}`);
+      }
+    }
+    if ((await waysInToDo(env, s, now)).length > 0) return;
+  }
+  const r = await env.DB.prepare("UPDATE searches SET state = 'ready', finished_at = ? WHERE id = ? AND state = 'ranking' AND ranked_at IS NOT NULL")
+    .bind(now.toISOString(), s.id)
+    .run();
+  if (r.meta.changes === 1) did.push("ready");
 }
 
 // --- the whole step ------------------------------------------------------------------------------
@@ -346,8 +397,12 @@ export async function advance(env: Env, searchId: string, now: Date = new Date()
     await finishChecking(env, s, now, did);
     s = (await getSearch(env.DB, searchId))!;
   }
-  if (s.state === "ranking") {
+  if (s.state === "ranking" && s.ranked_at === null) {
     await rankSearch(env, s, now, did);
+    s = (await getSearch(env.DB, searchId))!;
+  }
+  if (s.state === "ranking" && s.ranked_at !== null) {
+    await waysIn(env, s, now, startedMs, did);
     s = (await getSearch(env.DB, searchId))!;
   }
   return { state: s.state, did };

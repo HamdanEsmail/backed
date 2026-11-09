@@ -1,6 +1,6 @@
 // TinySearch: ranked web results for a query. Used to find an investor's own site when the row
 // gives none. Free, but each call appends a $0 ledger row.
-import { PRICES } from "../core/limits";
+import { PRICES, READ_TIMEOUT_MS } from "../core/limits";
 import type { Env } from "../env";
 import { readJson, tinyfishFetch } from "./client";
 
@@ -18,6 +18,8 @@ export async function searchWeb(env: Env, query: string): Promise<SearchHit[]> {
 
   const res = await tinyfishFetch(env, u.toString(), {
     method: "GET",
+    // A search that runs out of time throws (a TimeoutError); the caller tries again later.
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     spend: { kind: "search", amountUsd: PRICES.search, ref: "web" },
   });
   // Shape: { query, results: [{ position, site_name, snippet, title, url, date? }], ... }

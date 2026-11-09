@@ -185,6 +185,7 @@ describe("sentences and quotations", () => {
   it("does not end a sentence after Inc., U.S. or an initial", () => {
     const s = sentencesOf("Copperline Ventures Inc. led the round in the U.S. with J. Fennimore. Then it grew.");
     expect(s).toEqual(["Copperline Ventures Inc. led the round in the U.S. with J. Fennimore.", "Then it grew."]);
+    expect(sentencesOf("Our first check is $1.5M. We are patient (Inc. or not).")).toEqual(["Our first check is $1.5M.", "We are patient (Inc. or not)."]);
   });
 
   it("keeps a heading, a list item and the title apart from the next line", () => {

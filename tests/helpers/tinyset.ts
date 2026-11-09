@@ -5,6 +5,7 @@ import { fetchMock } from "./fetch-mock";
 export const DATASETS_API = "https://agent.tinyfish.ai/v1/datasets";
 export const WALLET_API = "https://agent.tinyfish.ai/v1/wallet";
 export const FETCH_API = "https://api.fetch.tinyfish.ai";
+export const SEARCH_API = "https://api.search.tinyfish.ai/";
 export const DATASET_ID = "0c7e3a52-6f1d-4b8e-9a40-1d2f3e4a5b6c";
 export const RUN_ID = "5a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
@@ -15,6 +16,11 @@ export type FakeTinyFish = {
   /** Balances the wallet answers with, in order; the last one repeats. */
   wallet: string[];
   pages: Record<string, string>;
+  /** Links a page answers with, by address. */
+  links: Record<string, string[]>;
+  /** Search results by query. */
+  results: Record<string, { url: string; title: string }[]>;
+  queries: string[];
   /** Times each page was read. */
   reads: Record<string, number>;
   creates: number;
@@ -29,6 +35,9 @@ export function fakeTinyFish(): FakeTinyFish {
     rows: [],
     wallet: ["10.00"],
     pages: {},
+    links: {},
+    results: {},
+    queries: [],
     reads: {},
     creates: 0,
     cancels: 0,
@@ -84,7 +93,19 @@ export function fakeTinyFish(): FakeTinyFish {
       const url = (body as { urls: string[] }).urls[0]!;
       tf.reads[url] = (tf.reads[url] ?? 0) + 1;
       const text = tf.pages[url];
-      return Response.json(text === undefined ? { results: [], errors: [{ url, error: "target_unreachable" }] } : { results: [{ text, final_url: url }] });
+      return Response.json(
+        text === undefined ? { results: [], errors: [{ url, error: "target_unreachable" }] } : { results: [{ text, final_url: url, links: tf.links[url] ?? [] }] },
+      );
+    },
+  });
+  fetchMock.intercept({
+    method: "GET",
+    url: new RegExp(`^${SEARCH_API.replace(/[.]/g, "\\.")}\\?`),
+    times: Infinity,
+    reply: (req) => {
+      const q = new URL(req.url).searchParams.get("query") ?? "";
+      tf.queries.push(q);
+      return Response.json({ query: q, results: (tf.results[q] ?? []).map((r, i) => ({ position: i + 1, site_name: "", snippet: "", ...r })) });
     },
   });
   return tf;

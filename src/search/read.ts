@@ -1,10 +1,11 @@
 // A search as the API and the pages read it: the search, its figures, the ranked investors with
 // every deal, quotation and part, and every company. Reads only what is stored.
-import { THIN_BELOW } from "../core/limits";
-import { STAGE_LABELS, type Stage } from "../core/stages";
+import { THIN_BELOW, WAY_IN_TOP } from "../core/limits";
+import { STAGE_LABELS, stageOfRound, type Stage } from "../core/stages";
 import type { Part } from "./score";
 import { getSearch, type CompanyInvestorRow, type CompanyRow, type SearchRow } from "./store";
-import { failedSentence, noCompaniesSentence, setApartSentence, thinSentence } from "./words";
+import { doorSentence, firstLine, NO_CHEQUE, warmRoute, type InvestorLookupRow, type WarmPerson } from "./wayin";
+import { failedSentence, NO_PARTNER, noCompaniesSentence, setApartSentence, thinSentence } from "./words";
 
 type RankingRow = {
   investor_key: string;
@@ -32,9 +33,21 @@ export type DealView = {
   source_url: string | null;
   read_at: string | null;
   partner: string | null;
+  /** "The announcement names no partner." when the investor led and the page named none. */
+  partner_note: string | null;
   founders: string[];
   points: number;
   parts: Part[];
+};
+
+export type WayInView = {
+  site_url: string | null;
+  /** "row" (the announcement row gave it), "search" (found by a search, so marked) or "none". */
+  site_source: string | null;
+  door: { kind: string | null; url: string | null; email: string | null; text: string };
+  cheque: { quote: string; url: string | null } | null;
+  cheque_text: string;
+  read_at: string | null;
 };
 
 export type InvestorView = {
@@ -47,6 +60,10 @@ export type InvestorView = {
   rounds: { stages: string[]; min_usd: number | null; max_usd: number | null };
   site_hint: string | null;
   deals: DealView[];
+  /** For the top investors, once looked up; null until then and below the top. */
+  way_in: WayInView | null;
+  warm_route: WarmPerson[];
+  first_line: string | null;
 };
 
 export type CompanyView = {
@@ -103,11 +120,17 @@ const founders = (json: string | null): string[] => (json === null ? [] : (JSON.
 export async function readSearch(db: D1Database, id: string): Promise<SearchView | null> {
   const s = await getSearch(db, id);
   if (s === null) return null;
-  const [companiesRes, investorsRes, rankingRes] = await db.batch([
+  const [companiesRes, investorsRes, rankingRes, lookupsRes] = await db.batch([
     db.prepare("SELECT * FROM companies WHERE search_id = ? AND removed = 0 ORDER BY announced_on DESC, name").bind(id),
     db.prepare("SELECT * FROM company_investors WHERE search_id = ?").bind(id),
     db.prepare("SELECT * FROM ranking WHERE search_id = ? ORDER BY position").bind(id),
+    db
+      .prepare(
+        "SELECT i.* FROM investors i JOIN ranking r ON r.investor_key = i.investor_key WHERE r.search_id = ? AND r.position <= ? AND i.state = 'done'",
+      )
+      .bind(id, WAY_IN_TOP),
   ]);
+  const lookups = new Map(((lookupsRes?.results ?? []) as InvestorLookupRow[]).map((l) => [l.investor_key, l]));
   const companies = (companiesRes?.results ?? []) as CompanyRow[];
   const links = (investorsRes?.results ?? []) as CompanyInvestorRow[];
   const ranking = (rankingRes?.results ?? []) as RankingRow[];
@@ -155,12 +178,22 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
           source_url: c.page_url ?? c.announcement_url,
           read_at: c.read_at,
           partner: l.role === "lead" ? c.partner_named : null,
+          partner_note: l.role === "lead" && c.partner_named === null ? NO_PARTNER : null,
           founders: founders(c.founders_named_json),
           points: l.points ?? 0,
           parts: l.parts_json === null ? [] : (JSON.parse(l.parts_json) as Part[]),
         };
       })
       .sort((a, b) => b.points - a.points || String(b.announced_on).localeCompare(String(a.announced_on)));
+    const warm = deals.map((d) => ({
+      company: d.company,
+      led: d.led,
+      stage: stageOfRound(d.round_type),
+      announcedOn: d.announced_on,
+      partner: d.partner,
+      founders: d.founders,
+    }));
+    const lookup = r.position <= WAY_IN_TOP ? lookups.get(r.investor_key) : undefined;
     return {
       position: r.position,
       name: r.name,
@@ -171,6 +204,19 @@ export async function readSearch(db: D1Database, id: string): Promise<SearchView
       rounds: { stages: (JSON.parse(r.stages_json) as Stage[]).map((x) => STAGE_LABELS[x]), min_usd: r.min_round_usd, max_usd: r.max_round_usd },
       site_hint: r.site_hint,
       deals,
+      way_in:
+        lookup === undefined
+          ? null
+          : {
+              site_url: lookup.site_url,
+              site_source: lookup.site_source,
+              door: { kind: lookup.door_kind, url: lookup.door_url, email: lookup.door_email, text: doorSentence(lookup) },
+              cheque: lookup.cheque_quote !== null ? { quote: lookup.cheque_quote, url: lookup.cheque_url } : null,
+              cheque_text: lookup.cheque_quote ?? NO_CHEQUE,
+              read_at: lookup.read_at,
+            },
+      warm_route: warmRoute(warm),
+      first_line: firstLine(warm, s.line, s.stage),
     };
   });
 

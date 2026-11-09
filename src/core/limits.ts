@@ -48,6 +48,9 @@ export const WAY_IN_TOP = 10;
 export const WAY_INS_PER_ADVANCE = 2;
 /** An investor lookup is reused across searches for this many days. */
 export const INVESTOR_REUSE_DAYS = 30;
+/** A lookup that failed for a passing reason (a timeout, a busy service) is tried this many times
+ *  in all before it is stored as it stands. */
+export const WAY_IN_ATTEMPTS = 3;
 
 // --- Keeping and reusing -------------------------------------------------------------------------
 

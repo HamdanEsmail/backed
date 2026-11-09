@@ -98,7 +98,8 @@ function splitSentences(block: string): string[] {
   const re = /[.!?…]+["'”’)\]]*\s+(?=["'“‘(\[]?[\p{Lu}\p{N}])/gu;
   for (let m = re.exec(block); m !== null; m = re.exec(block)) {
     const before = block.slice(start, m.index);
-    const lastWord = (/([\p{L}.]+)$/u.exec(before)?.[1] ?? "").toLowerCase();
+    // The whole last token, so the "M" of "$1.5M" is not taken for an initial.
+    const lastWord = (/(\S+)$/u.exec(before)?.[1] ?? "").replace(/^[^\p{L}\p{N}]+/u, "").toLowerCase();
     // "Inc. ", "U.S. " and single initials ("J. ") do not end a sentence.
     if (ABBREVIATIONS.has(lastWord) || /^\p{L}$/u.test(lastWord)) continue;
     out.push(block.slice(start, m.index + m[0].trimEnd().length).trim());
