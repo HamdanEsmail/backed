@@ -251,3 +251,31 @@ mark { background: var(--bg); color: var(--ink); padding: 0 .12em; }
   .stage .pick.read span { flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; }
   .stage .pick.read span i { order: -1; font-size: var(--step-small); }
 }
+.first .facts { margin-top: 14px; max-width: 46ch; }
+
+/* ---- The plain pages: saved searches, the score, the API, about ------------------------------- */
+.plain { padding: clamp(56px, 7vw, 110px) var(--m) clamp(72px, 9vw, 150px); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--m); }
+.plain .body { grid-column: 1 / span 8; }
+.plain h1 { font-size: var(--step-head); letter-spacing: -0.04em; line-height: 1.02; max-width: 18ch; }
+.plain .lede { margin-top: 18px; font-size: var(--step-lead); line-height: 1.3; max-width: 34ch; }
+.plain .text { margin-top: clamp(48px, 6vw, 96px); max-width: 62ch; }
+.plain .text h2 { font-size: var(--step-lead); font-weight: 500; letter-spacing: -0.02em; margin-top: 48px; }
+.plain .text h2:first-child { margin-top: 0; }
+.plain .text p { margin-top: 12px; }
+.plain code { font-family: inherit; font-weight: 500; }
+.plain pre { font-family: inherit; margin-top: 14px; background: var(--ink); color: var(--paper); padding: 18px 20px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--step-small); }
+.plain pre code { font-weight: 400; }
+.endpoint + .endpoint, .endpoint + p { margin-top: 48px; }
+.saved { margin-top: clamp(48px, 6vw, 96px); }
+.saved li { padding-bottom: clamp(32px, 3.4vw, 52px); }
+.saved .line { font-size: var(--step-head); letter-spacing: -0.04em; line-height: 1.04; max-width: 22ch; }
+.saved .line a { text-decoration: none; } .saved .line a:hover { text-decoration: underline; }
+.saved .meta { margin-top: 10px; }
+.services div { display: grid; grid-template-columns: 9em minmax(0, 1fr); column-gap: 20px; margin-top: 18px; }
+.services dt { font-weight: 500; grid-row: span 2; }
+.services dd.num { font-size: var(--step-small); }
+@media (max-width: 860px) {
+  .plain { display: block; padding: 40px 20px 72px; }
+  .services div { grid-template-columns: 1fr; }
+  .services dt { grid-row: auto; }
+}

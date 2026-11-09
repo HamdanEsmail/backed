@@ -1,6 +1,8 @@
 // The pieces the home and a search's page share: the stage, the first investor's sheet, a deal with
 // its quotation and its sum, the way in, the other investors, and every company as plain names.
+import type { Child } from "hono/jsx";
 import { COUNTRIES } from "../core/countries";
+import { WAY_IN_TOP } from "../core/limits";
 import { matcherFor, nameHits, prepareSentence } from "../core/names";
 import { STAGE_LABELS, STAGES, type Stage } from "../core/stages";
 import type { CompanyView, DealView, InvestorView, SearchView } from "../search/read";
@@ -80,7 +82,14 @@ export function whyFirst(inv: InvestorView, total: number, founder: { stage: Sta
   if (k > 0 && inv.deals.every((d) => roundStage(d.round_type) === founder.stage)) extra.push(`${all(k)}at ${stageWord(founder.stage)}`);
   if (k > 0 && inv.deals.every((d) => d.parts.some((p) => p.part === "same_country"))) extra.push(`${all(k)}in ${place(founder.country)}`);
   const what = `it backed ${count(k)} ${k === 1 ? "company" : "companies"} like this one${led}`;
-  return `First of ${total}, with ${plural(inv.score, "point")}: ${what}${extra.length > 0 ? `, ${extra.join(" and ")}` : ""}. Each point is counted below.`;
+  return `${rankWord(inv.position)} of ${total}, with ${plural(inv.score, "point")}: ${what}${extra.length > 0 ? `, ${extra.join(" and ")}` : ""}. Each point is counted below.`;
+}
+
+const ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"];
+
+/** "First", "Second" … "Tenth", then "Number 14". */
+export function rankWord(position: number): string {
+  return ORDINALS[position - 1] ?? `Number ${position}`;
 }
 
 /** The people, grouped: "ask Tobias Quell, the partner who led Larder Loop's round; or Mira Odhiambo,
@@ -130,7 +139,9 @@ export function WayIn(props: { inv: InvestorView }) {
           ? "Their site could not be read"
           : kind === "no_site"
             ? "No site of their own was found"
-            : "Their site has not been read yet";
+            : props.inv.position > WAY_IN_TOP
+              ? "Their site is looked up for the first ten only"
+              : "Their site has not been read yet";
     joiner = ", so the way in is warm: ";
   }
   return (
@@ -152,7 +163,7 @@ export function WayIn(props: { inv: InvestorView }) {
 }
 
 /** The first investor, on a white sheet: why it is first, every deal with its quotation and sum, the way in. */
-export function FirstSheet(props: { inv: InvestorView; total: number; view: SearchView; href: string | null }) {
+export function FirstSheet(props: { inv: InvestorView; total: number; view: SearchView; href: string | null; children?: Child }) {
   const { inv, view } = props;
   return (
     <article class="first">
@@ -161,6 +172,7 @@ export function FirstSheet(props: { inv: InvestorView; total: number; view: Sear
         <p class="n num">{inv.score}</p>
       </div>
       <p class="why">{whyFirst(inv, props.total, view.search)}</p>
+      {props.children ?? null}
       {inv.deals.map((d) => (
         <Deal deal={d} investor={inv.name} country={view.search.country} />
       ))}

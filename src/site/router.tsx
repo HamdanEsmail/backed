@@ -8,7 +8,12 @@ import { visitorHash } from "../auth";
 import type { Env } from "../env";
 import { advanceLater } from "../search/advance";
 import { startPublicSearch } from "../search/create";
-import { readSearch, type SearchView } from "../search/read";
+import { csvResponse } from "../search/csv-response";
+import { listSearches, readSearch, type SearchView } from "../search/read";
+import { readStats } from "../handlers/stats";
+import { PageContext } from "./layout";
+import { InvestorPage } from "./views/investor";
+import { AboutPage, ApiPage, SavedPage, ScorePage } from "./views/pages";
 import { checkInput } from "../search/spec";
 import { isStage, type Stage } from "../core/stages";
 import { isCountry } from "../core/countries";
@@ -29,8 +34,11 @@ export const siteEnabled = (env: Env): boolean => env.SITE_ENABLED === "1";
 
 const SEARCH_ID = /^[a-z0-9]{12}$/;
 
+const base = (env: Env) => env.PUBLIC_BASE_URL.replace(/\/+$/, "");
+
 function render(c: AppContext, page: Child, status: ContentfulStatusCode = 200) {
-  return c.html(page as unknown as string, status, { ...SECURITY_HEADERS, "cache-control": "no-store" });
+  const tree = <PageContext.Provider value={{ base: base(c.env), path: c.req.path }}>{page}</PageContext.Provider>;
+  return c.html(tree as unknown as string, status, { ...SECURITY_HEADERS, "cache-control": "no-store" });
 }
 
 /** The API, the hooks and the assets are never a page. */
@@ -43,7 +51,7 @@ export function notFound(c: AppContext) {
 }
 
 async function savedCount(db: D1Database): Promise<number> {
-  const row = await db.prepare("SELECT COUNT(*) AS n FROM searches WHERE state = 'ready' AND demo IS NOT NULL").first<{ n: number }>();
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM searches WHERE state = 'ready'").first<{ n: number }>();
   return row?.n ?? 0;
 }
 
@@ -98,12 +106,46 @@ siteRouter.post("/search", async (c) => {
   return c.redirect(`/searches/${started.id}`, 303);
 });
 
-siteRouter.get("/searches/:id", async (c) => {
+/** A search's page, or its export: `/searches/:id`, `/searches/:id.csv`, `/searches/:id.json`. */
+siteRouter.get("/searches/:name", async (c) => {
+  if (!siteEnabled(c.env)) return notFound(c);
+  const m = /^([a-z0-9]{12})(?:\.(csv|json))?$/.exec(c.req.param("name"));
+  if (m === null) return notFound(c);
+  const id = m[1]!;
+  const [view, saved] = await Promise.all([readSearch(c.env.DB, id), savedCount(c.env.DB)]);
+  if (view === null) return notFound(c);
+  if (view.search.state !== "ready" && view.search.state !== "failed") advanceLater(c.env, c.executionCtx, id);
+  if (m[2] === "csv") return csvResponse(view);
+  if (m[2] === "json") return c.json(view, 200, { "content-disposition": `attachment; filename="backed-${id}.json"` });
+  return render(c, <SearchPage view={view} saved={saved} />);
+});
+
+siteRouter.get("/searches/:id/investors/:slug", async (c) => {
   if (!siteEnabled(c.env)) return notFound(c);
   const id = c.req.param("id");
   if (!SEARCH_ID.test(id)) return notFound(c);
   const [view, saved] = await Promise.all([readSearch(c.env.DB, id), savedCount(c.env.DB)]);
-  if (view === null) return notFound(c);
-  if (view.search.state !== "ready" && view.search.state !== "failed") advanceLater(c.env, c.executionCtx, id);
-  return render(c, <SearchPage view={view} saved={saved} />);
+  const inv = view?.investors.find((i) => i.slug === c.req.param("slug"));
+  if (view === null || inv === undefined) return notFound(c);
+  return render(c, <InvestorPage view={view} inv={inv} saved={saved} />);
+});
+
+siteRouter.get("/searches", async (c) => {
+  if (!siteEnabled(c.env)) return notFound(c);
+  const rows = await listSearches(c.env.DB);
+  return render(c, <SavedPage rows={rows} />);
+});
+
+siteRouter.get("/score", async (c) => (siteEnabled(c.env) ? render(c, <ScorePage saved={await savedCount(c.env.DB)} />) : notFound(c)));
+
+siteRouter.get("/api", async (c) => {
+  if (!siteEnabled(c.env)) return notFound(c);
+  const [rows, saved] = await Promise.all([listSearches(c.env.DB, 1), savedCount(c.env.DB)]);
+  return render(c, <ApiPage base={base(c.env)} sampleId={rows[0]?.id ?? null} saved={saved} />);
+});
+
+siteRouter.get("/about", async (c) => {
+  if (!siteEnabled(c.env)) return notFound(c);
+  const [stats, saved] = await Promise.all([readStats(c.env.DB), savedCount(c.env.DB)]);
+  return render(c, <AboutPage stats={stats} saved={saved} />);
 });

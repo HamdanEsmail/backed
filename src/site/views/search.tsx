@@ -15,7 +15,7 @@ export const REFRESH_SECONDS = 5;
 /** The investors after the first shown with their way in. */
 const WAY_IN_ROWS = 10;
 
-function Stage(props: { view: SearchView }) {
+export function ReadStage(props: { view: SearchView }) {
   const { search, figures } = props.view;
   const running = search.state !== "ready" && search.state !== "failed";
   return (
@@ -205,7 +205,7 @@ export function SearchPage(props: { view: SearchView; saved: number }) {
       noindex={view.search.demo === null}
     >
       <div class="split">
-        <Stage view={view} />
+        <ReadStage view={view} />
         <div class="col">
           <Nav home={false} className="top" />
           {state === "ready" ? <Ready view={view} /> : state === "failed" ? <Failed view={view} /> : <Running view={view} />}

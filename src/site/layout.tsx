@@ -2,11 +2,20 @@
 // stylesheet, the site's sheet) and the footer. No inline script or style: the content-security-
 // policy allows this origin and Fontshare's two hosts only, and every screen works without script.
 import type { Child } from "hono/jsx";
+import { createContext, useContext } from "hono/jsx";
 import { raw } from "hono/html";
 
 const FONTS = "https://api.fontshare.com/v2/css?f[]=switzer@400,500&display=swap";
 
+/** The site's own address and the page's path, for the link-preview tags (which must be absolute).
+ *  Set by the router for every page. */
+export const PageContext = createContext<{ base: string; path: string }>({ base: "", path: "/" });
+
+/** The link-preview card, 1200 by 630: the stage and the wordmark. */
+const SOCIAL_IMAGE = "/assets/social.png";
+
 export function Layout(props: { title: string; description: string; refreshSeconds?: number; noindex?: boolean; children: Child }) {
+  const page = useContext(PageContext);
   return (
     <>
       {raw("<!doctype html>")}
@@ -19,6 +28,17 @@ export function Layout(props: { title: string; description: string; refreshSecon
           <title>{props.title}</title>
           <meta name="description" content={props.description} />
           <meta name="theme-color" content="#ff7a1f" />
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content="Backed" />
+          <meta property="og:title" content={props.title} />
+          <meta property="og:description" content={props.description} />
+          <meta property="og:url" content={page.base + page.path} />
+          <meta property="og:image" content={page.base + SOCIAL_IMAGE} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta property="og:image:alt" content="Backed: a founder's one line on a dark stage, and the word backed crossing onto the orange page." />
+          <meta name="twitter:card" content="summary_large_image" />
+          <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
           <link rel="preconnect" href="https://api.fontshare.com" />
           <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin="anonymous" />
           <link rel="stylesheet" href={FONTS} />

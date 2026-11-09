@@ -5,6 +5,7 @@ import { adminOnly, visitorHash } from "../auth";
 import type { Env } from "../env";
 import { advanceLater } from "../search/advance";
 import { importSearch, startAdminSearch, startPublicSearch } from "../search/create";
+import { csvResponse } from "../search/csv-response";
 import { listSearches, readSearch } from "../search/read";
 import { checkInput } from "../search/spec";
 import { TinyFishError } from "../tinyfish/client";
@@ -43,10 +44,11 @@ searchesRouter.post("/api/searches", async (c) => {
 searchesRouter.get("/api/searches", async (c) => c.json({ searches: await listSearches(c.env.DB) }));
 
 searchesRouter.get("/api/searches/:id", async (c) => {
-  const view = await readSearch(c.env.DB, c.req.param("id"));
+  const m = /^([a-z0-9]{12})(\.csv)?$/.exec(c.req.param("id"));
+  const view = m === null ? null : await readSearch(c.env.DB, m[1]!);
   if (view === null) return c.json({ error: "not_found" }, 404);
   if (!FINISHED.has(view.search.state)) advanceLater(c.env, c.executionCtx, view.search.id);
-  return c.json(view);
+  return m![2] === ".csv" ? csvResponse(view) : c.json(view);
 });
 
 searchesRouter.post("/api/admin/searches", adminOnly, async (c) => {
