@@ -141,6 +141,10 @@ round stage); UAE, two companies proved, Astral (MapleVC) and Aristotle (True Ve
   is reached. Backed deletes only the Monitor ids it stored; it never lists, pauses or edits any other.
 - **Migration `0007`**: `watches`, `watch_runs`, `watch_hits`. The search's page says "New since <date>" with the
   companies the watch added, and marks each one "Found by the watch" in the list of companies.
+- **Live on 9 November** (version `c88bbb30`), with Hamdan's yes: migration `0007` applied first, then the deploy,
+  then the three Monitors, watching the demo searches until 17 November at 06:00 and 18:00 UTC. Each Monitor
+  reads "active" with no error. Their creation runs sent no webhook (nothing new within the day), and the wallet
+  had not moved from $37.052 three minutes later, so the $0.005 rate is still to be confirmed against it.
 
 ## What the two paid demo searches got wrong
 
@@ -195,7 +199,8 @@ call. Checking and ranking the two searches again cost nothing.
 | 9 Nov, Task 6 | Demo 1, restaurant software, United States, seed: the finished dataset adopted with the admin import | $0.00 |
 | 9 Nov, Task 6 | Demo 2, cold storage for smallholder farmers, Kenya, pre-seed: one TinySet run (`8nv424ha5tmn`), 27 rows | $0.60 |
 | 9 Nov, Task 6 | Demo 3, an Arabic AI tutor for school students, United Arab Emirates, seed: one TinySet run (`t8mcb97ubdl8`), 29 rows | $1.10 |
-| | **In all** | **$2.90** |
+| 9 Nov, Task 7 | Three Topic Monitors created, one for each demo search (creating one runs it once), at the rate known from the first account | $0.015 |
+| | **In all** | **$2.915** |
 
 The two demo runs cost $1.70 by the wallet ($38.752 before, $37.052 after). Each was first booked at $0.50, the
 difference at the moment the run ended; the rest was billed after that read. The settling read corrected demo 3
