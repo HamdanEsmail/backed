@@ -240,6 +240,11 @@ or to the score, so the page that says how TinyFish is used could only be reache
 No script was added and nothing is read from TinyFish to draw these pages. I looked at each one at 1440 and 390
 wide on a preview upload that reads the live data, before the deploy. 164 tests.
 
+**Live on 10 November** (version `7bcea0f9`): the deploy alone, no migration, with the five fixes above and these
+pages. After it, the home, the four pages, the three stored searches with their JSON and CSV and one investor's
+page each answered 200, fifteen times out of fifteen for the pages, and the first screen of every page looked
+right at 1440 and 390 wide. The ledger was untouched at $2.915.
+
 ## Paid calls
 
 TinySet runs and Monitor runs are the paid calls. A TinySet run is booked when it ends, from the wallet
@@ -276,3 +281,16 @@ Measured with `wrangler tail` on 9 November, ten requests each, after every fix 
 
 Before the pattern fix the home's median was 169 ms and its worst 430 ms. The worst figures are most likely the
 first request a new isolate serves. Every request answered.
+
+Measured again on 10 November, after the deploy with the rebuilt pages. I sent ten requests to each of seven
+addresses; `wrangler tail` caught 39 of the 70, and every one ended `ok`:
+
+| Request | Caught | Median | Worst |
+|---|---|---|---|
+| The home | 7 | 6 ms | 16 ms |
+| How it works | 8 | 6 ms | 13 ms |
+| The score | 6 | 4 ms | 5 ms |
+| The API page | 6 | 3 ms | 4 ms |
+| Saved searches | 4 | 1 ms | 1 ms |
+| A search's page (restaurant) | 5 | 4 ms | 10 ms |
+| An investor's page | 3 | 3 ms | 3 ms |
