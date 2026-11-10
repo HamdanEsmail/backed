@@ -223,7 +223,8 @@ documents each result with its own `position`, counted from 1, and lists the new
 one new result at position 1, the watch would have looked at place 1, found nothing, and added no company. A
 new result is now found by its position; results that carry no position are still read by their place. With
 my tests' runs written in the documented shape, four of them failed on the old rule. No run with a new
-result has been delivered yet, so this is from the reference, not from a real payload. 166 tests.
+result has been delivered yet, so this is from the reference, not from a real payload. 166 tests. Live as
+version `8ac43dc0` at 04:45 UTC on 10 November, before the watches' first scheduled run at 06:00 UTC.
 
 ## The other pages, rebuilt on 10 November
 
