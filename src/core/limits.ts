@@ -13,8 +13,11 @@ export const LINE_MAX_CHARS = 140;
 
 // --- How a search runs ---------------------------------------------------------------------------
 
+/** How long a TinySet run takes, in minutes, as the runs so far have gone. The page of a running
+ *  search says so. */
+export const RUN_TAKES_MINUTES = { from: 5, to: 20 } as const;
 /** One search runs on TinySet at a time; a holder of the run slot older than this no longer blocks
- *  the queue (a TinySet run takes 5 to 20 minutes). */
+ *  the queue. */
 export const RUN_SLOT_STALE_MINUTES = 45;
 /** A search still finding after this long is failed: the run is cancelled and nothing is ranked
  *  unless enough companies were proved. */

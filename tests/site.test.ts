@@ -164,6 +164,22 @@ describe("the site", () => {
     expect(html).toContain("Proved: led by Copperline Ventures");
   });
 
+  it("says how long a search takes and when this one was started, while TinySet is finding", async () => {
+    const now = new Date();
+    const r = await startAdminSearch(env, INPUT, null, now);
+    if (!r.ok) throw new Error(r.error);
+    await advance(env, r.id, now);
+    const startedAgo = (ms: number) => env.DB.prepare("UPDATE searches SET created_at = ? WHERE id = ?").bind(new Date(Date.now() - ms).toISOString(), r.id).run();
+    await startedAgo(9.5 * 60_000);
+    const { html } = await page(`/searches/${r.id}`);
+    expect(html).toContain("for up to 30 companies like this");
+    expect(html).toContain("That takes 5 to 20 minutes, and this search was started 9 minutes ago.");
+    await startedAgo(90_000);
+    expect((await page(`/searches/${r.id}`)).html).toContain("this search was started 1 minute ago.");
+    await startedAgo(20_000);
+    expect((await page(`/searches/${r.id}`)).html).toContain("this search was started less than a minute ago.");
+  });
+
   it("shows a ready search in full with no refresh, and a failed one with its sentence", async () => {
     const id = await readySearch();
     const ready = await page(`/searches/${id}`);

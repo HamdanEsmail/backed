@@ -3,6 +3,7 @@
 // proved with its lead investor or set apart with its reason, and the page refreshes itself (a meta
 // refresh: nothing depends on script). When ready, the ranked list in full, then every company,
 // then what TinySet was asked.
+import { RUN_TAKES_MINUTES, TARGET_ROWS } from "../../core/limits";
 import { STAGE_LABELS } from "../../core/stages";
 import type { CompanyView, SearchView } from "../../search/read";
 import { monthYear } from "../../search/spec";
@@ -58,15 +59,23 @@ export function ReadStage(props: { view: SearchView }) {
   );
 }
 
-const STATE_WORDS: Record<string, { said: string; note: (v: SearchView) => string }> = {
+/** "9 minutes ago", counted in whole minutes from when the search was started. */
+function startedAgo(createdAt: string, now: Date): string {
+  const minutes = Math.floor((now.getTime() - Date.parse(createdAt)) / 60_000);
+  if (!(minutes >= 1)) return "less than a minute ago";
+  return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+}
+
+const STATE_WORDS: Record<string, { said: string; note: (v: SearchView, now: Date) => string }> = {
   queued: {
     said: "Waiting its turn.",
     note: () => "One search runs at a time, so this one starts when the one before it ends. This page refreshes itself.",
   },
   finding: {
     said: "Finding companies like this.",
-    note: (v) =>
-      `TinySet is searching the live web for companies like this that raised since ${monthYear(v.search.window_start)}. Each one is checked against its own announcement as it arrives. This page refreshes itself.`,
+    // A visitor who is not told how long this takes reads a working search as a stuck one.
+    note: (v, now) =>
+      `TinySet is searching the live web for up to ${TARGET_ROWS} companies like this that raised since ${monthYear(v.search.window_start)}. That takes ${RUN_TAKES_MINUTES.from} to ${RUN_TAKES_MINUTES.to} minutes, and this search was started ${startedAgo(v.search.created_at, now)}. Each company is checked against its own announcement as it arrives. This page refreshes itself.`,
   },
   checking: {
     said: "Checking every announcement.",
@@ -122,7 +131,7 @@ function Running(props: { view: SearchView }) {
   return (
     <section class="block lead-in" id="the-list">
       <p class="said">{words.said}</p>
-      <p class="note">{words.note(props.view)}</p>
+      <p class="note">{words.note(props.view, new Date())}</p>
       <ol class="arrivals">
         {arrivalOrder(props.view.companies).map((c) => (
           <Arrival c={c} />
