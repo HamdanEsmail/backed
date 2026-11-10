@@ -14,6 +14,15 @@ export const PageContext = createContext<{ base: string; path: string }>({ base:
 /** The link-preview card, 1200 by 630: the stage and the wordmark. */
 const SOCIAL_IMAGE = "/assets/social.png";
 
+/** Who built it, as a link to his GitHub: in the footer of every page and on How it works. */
+export function Author() {
+  return (
+    <a href="https://github.com/HamdanEsmail" rel="author">
+      Hamdan Esmail
+    </a>
+  );
+}
+
 export function Layout(props: { title: string; description: string; refreshSeconds?: number; noindex?: boolean; children: Child }) {
   const page = useContext(PageContext);
   return (
@@ -27,6 +36,7 @@ export function Layout(props: { title: string; description: string; refreshSecon
           {props.noindex ? <meta name="robots" content="noindex" /> : null}
           <title>{props.title}</title>
           <meta name="description" content={props.description} />
+          <meta name="author" content="Hamdan Esmail" />
           <meta name="theme-color" content="#ff7a1f" />
           <meta property="og:type" content="website" />
           <meta property="og:site_name" content="Backed" />
@@ -89,7 +99,7 @@ export function Footer(props: { saved: number }) {
           <p>Every list downloads as CSV and JSON, with the proof link and the quoted sentence in each row.</p>
         </div>
         <p class="legal">
-          Built by Hamdan Esmail for the TinyFish Funding Radar bounty. Backed reads public funding announcements with TinyFish TinySet, Fetch, Search and
+          Built by <Author /> for the TinyFish Funding Radar bounty. Backed reads public funding announcements with TinyFish TinySet, Fetch, Search and
           Monitor. It is a starting list, not investment advice.
         </p>
       </div>

@@ -25,7 +25,7 @@ import { POINTS } from "../../search/score";
 import { SET_APART } from "../../search/words";
 import { FirstSheet, Quote, Sum } from "../components";
 import { count, host, money, plural, roundStage, shortDate, stageWord } from "../format";
-import { Footer, Layout, Nav } from "../layout";
+import { Author, Footer, Layout, Nav } from "../layout";
 import { ScoreSheet } from "./home";
 
 type Stats = Awaited<ReturnType<typeof readStats>>;
@@ -257,7 +257,9 @@ export function AboutPage(props: { stats: Stats; saved: number; example: SearchV
                 </div>
                 <div>
                   <dt>Who made it</dt>
-                  <dd>Built by Hamdan Esmail for the TinyFish Funding Radar bounty. It is a starting list, not investment advice.</dd>
+                  <dd>
+                    Built by <Author /> for the TinyFish Funding Radar bounty. It is a starting list, not investment advice.
+                  </dd>
                 </div>
               </dl>
             </div>

@@ -195,6 +195,17 @@ describe("the site", () => {
     expect(html).toContain("One saved search is free to open, with every investor");
   });
 
+  it("names who built it, with a link to his GitHub, in the footer of every page and on How it works", async () => {
+    const credit = 'Built by <a href="https://github.com/HamdanEsmail" rel="author">Hamdan Esmail</a> for the TinyFish Funding Radar bounty.';
+    for (const path of ["/", "/score", "/api", "/searches"]) {
+      const { html } = await page(path);
+      expect(html.split(credit).length - 1).toBe(1);
+      expect(html).toContain('<meta name="author" content="Hamdan Esmail"/>');
+    }
+    const about = await page("/about");
+    expect(about.html.split(credit).length - 1).toBe(2);
+  });
+
   it("refuses a second search from the same visitor with its sentence", async () => {
     const post = (line: string) =>
       callWorker("/search", {
