@@ -136,8 +136,10 @@ export type MonitorRun = {
  * The parts of a Topic Monitor payload Backed reads, from the top level or a nested `run`. The ids
  * come in more than one form: `search_monitor_id` or `monitor_id`, else inside `request_id`
  * ("search-monitor:<id>:run:<id>"); the run is `id`, else the run part of `request_id`. The results
- * are those at `new_result_positions` (0-based) when the payload gives them, else every result:
- * one already known adds nothing.
+ * are the new ones when the payload names them, else every result: one already known adds nothing.
+ * TinyFish documents each result with its own `position`, counted from 1, and
+ * `new_result_positions` as the positions of the new ones, so a new result is found by its position;
+ * only results that carry no position are read by their place in the list, from 0.
  */
 export function readMonitorRun(data: unknown): MonitorRun {
   const layers = [data, isRecord(data) ? data.run : undefined].filter(isRecord);
@@ -152,10 +154,13 @@ export function readMonitorRun(data: unknown): MonitorRun {
 
   const all = pick("results");
   const positions = pick("new_result_positions");
+  const ranked = Array.isArray(all) && all.some((r) => isRecord(r) && typeof r.position === "number");
   const items = !Array.isArray(all)
     ? []
     : Array.isArray(positions)
-      ? positions.filter((p): p is number => typeof p === "number" && Number.isInteger(p)).map((p) => all[p])
+      ? positions
+          .filter((p): p is number => typeof p === "number" && Number.isInteger(p))
+          .map((p) => (ranked ? all.find((r) => isRecord(r) && r.position === p) : all[p]))
       : all;
   const results: MonitorRun["results"] = [];
   for (const item of items) {

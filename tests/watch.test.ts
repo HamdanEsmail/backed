@@ -111,11 +111,13 @@ function hook(payload: unknown, secret = "test-secret") {
   return callWorker(`/hooks/monitor/${secret}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
 }
 
+// A run as TinyFish documents it: each result has its own position, counted from 1, and the new ones
+// are listed by that position.
 const run = (runId: string, results: { url: string; title: string; date?: string }[]) => ({
   search_monitor_id: MONITOR_ID,
   id: runId,
-  results,
-  new_result_positions: results.map((_, i) => i),
+  results: results.map((r, i) => ({ position: i + 1, ...r })),
+  new_result_positions: results.map((_, i) => i + 1),
 });
 
 async function monitorSpend() {
@@ -350,5 +352,20 @@ describe("reading a page a watch found", () => {
       new_result_positions: [1, 2],
     });
     expect(r).toEqual({ monitorId: "mon-1", runId: "run-9", results: [{ url: "https://c.example/3", title: "C", date: "2 days ago" }] });
+  });
+
+  it("finds a new result by its own position, so the first and the last of a list can be the new ones", () => {
+    const r = readMonitorRun({
+      search_monitor_id: "mon-1",
+      id: "run-10",
+      results: [
+        { position: 1, url: "https://a.example/1", title: "A" },
+        { position: 2, url: "https://b.example/2", title: "B" },
+        { position: 3, url: "https://c.example/3", title: "C" },
+      ],
+      new_result_positions: [1, 3],
+    });
+    // Read as places in the list from 0, this would be B alone.
+    expect(r.results.map((x) => x.url)).toEqual(["https://a.example/1", "https://c.example/3"]);
   });
 });
