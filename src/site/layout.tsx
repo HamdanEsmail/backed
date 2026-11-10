@@ -1,5 +1,5 @@
 // The document every screen shares: the head (title, description, Switzer from Fontshare's own
-// stylesheet, the site's sheet) and the footer. No inline script or style: the content-security-
+// stylesheet, the site's sheet) and the footer. One script from this site, which a page works without, and no inline script or style: the content-security-
 // policy allows this origin and Fontshare's two hosts only, and every screen works without script.
 import type { Child } from "hono/jsx";
 import { createContext, useContext } from "hono/jsx";
@@ -53,6 +53,7 @@ export function Layout(props: { title: string; description: string; refreshSecon
           <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin="anonymous" />
           <link rel="stylesheet" href={FONTS} />
           <link rel="stylesheet" href="/assets/site.css" />
+          <script src="/assets/wait.js" defer></script>
         </head>
         <body>
           <main>{props.children}</main>

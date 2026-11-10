@@ -21,7 +21,7 @@ export function ReadStage(props: { view: SearchView }) {
   const { search, figures } = props.view;
   const running = search.state !== "ready" && search.state !== "failed";
   return (
-    <div class="stage" data-ui>
+    <div class={running ? "stage live" : "stage"} data-ui>
       <div>
         <p class="label">The line searched</p>
         <p class="line">{search.line}</p>
@@ -37,6 +37,7 @@ export function ReadStage(props: { view: SearchView }) {
           Search for another startup
         </a>
       </div>
+      {running ? <Progress view={props.view} /> : null}
       <div class="tally four">
         <div>
           <b class="num">{figures.found}</b>
@@ -59,23 +60,15 @@ export function ReadStage(props: { view: SearchView }) {
   );
 }
 
-/** "9 minutes ago", counted in whole minutes from when the search was started. */
-function startedAgo(createdAt: string, now: Date): string {
-  const minutes = Math.floor((now.getTime() - Date.parse(createdAt)) / 60_000);
-  if (!(minutes >= 1)) return "less than a minute ago";
-  return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
-}
-
-const STATE_WORDS: Record<string, { said: string; note: (v: SearchView, now: Date) => string }> = {
+const STATE_WORDS: Record<string, { said: string; note: (v: SearchView) => string }> = {
   queued: {
     said: "Waiting its turn.",
     note: () => "One search runs at a time, so this one starts when the one before it ends. This page refreshes itself.",
   },
   finding: {
     said: "Finding companies like this.",
-    // A visitor who is not told how long this takes reads a working search as a stuck one.
-    note: (v, now) =>
-      `TinySet is searching the live web for up to ${TARGET_ROWS} companies like this that raised since ${monthYear(v.search.window_start)}. That takes ${RUN_TAKES_MINUTES.from} to ${RUN_TAKES_MINUTES.to} minutes, and this search was started ${startedAgo(v.search.created_at, now)}. Each company is checked against its own announcement as it arrives. This page refreshes itself.`,
+    note: (v) =>
+      `TinySet is searching the live web for up to ${TARGET_ROWS} companies like this that raised since ${monthYear(v.search.window_start)}. Each company is checked against its own announcement as it arrives. This page refreshes itself.`,
   },
   checking: {
     said: "Checking every announcement.",
@@ -126,12 +119,72 @@ function arrivalOrder(companies: CompanyView[]): CompanyView[] {
   return [...companies].sort((a, b) => Number(open(b)) - Number(open(a)) || String(b.read_at ?? "").localeCompare(String(a.read_at ?? "")));
 }
 
+const STEPS = ["Find companies", "Check announcements", "Rank investors"] as const;
+const STEP_OF: Record<string, number> = { finding: 0, checking: 1, ranking: 2 };
+
+/** Minutes and seconds since the search was started, as "9:32". Never negative. */
+export function waitClock(createdAt: string, now: Date): string {
+  const seconds = Math.max(0, Math.floor((now.getTime() - Date.parse(createdAt)) / 1000)) || 0;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * What a visitor watches while a search runs, on the stage where it is the first thing seen on a
+ * phone: the three steps with the one it is on, how far that step is, and a clock. A visitor who sees nothing move reads a working search as a stuck one.
+ * The bar is a real count where there is one (companies found of those looked for, announcements
+ * read of those found); where there is none it only moves.
+ */
+function Progress(props: { view: SearchView }) {
+  const { search, figures } = props.view;
+  const at = STEP_OF[search.state] ?? -1;
+  const checked = figures.found - figures.checking;
+  let bar;
+  let count: string | null = null;
+  if (search.state === "finding") {
+    const found = Math.min(figures.found, TARGET_ROWS);
+    bar = (
+      <progress class="meter" value={found} max={TARGET_ROWS}>
+        {found} of {TARGET_ROWS}
+      </progress>
+    );
+    count = `${figures.found} of up to ${TARGET_ROWS} companies found.`;
+  } else if (search.state === "checking" && figures.found > 0) {
+    bar = (
+      <progress class="meter" value={checked} max={figures.found}>
+        {checked} of {figures.found}
+      </progress>
+    );
+    count = `${checked} of ${figures.found} announcements checked.`;
+  } else {
+    bar = <div class="bar" role="progressbar" aria-label={search.state === "ranking" ? "Ranking the investors" : "Waiting its turn"}></div>;
+  }
+  return (
+    <div class="progress">
+      <ol class="wait-steps" aria-label="Progress">
+        {STEPS.map((step, i) => (
+          <li class={i < at ? "done" : undefined} aria-current={i === at ? "step" : undefined}>
+            {step}
+          </li>
+        ))}
+      </ol>
+      {bar}
+      <p class="wait-clock">
+        {count !== null ? `${count} ` : ""}
+        <span class="clock" data-since={search.created_at}>
+          {waitClock(search.created_at, new Date())}
+        </span>{" "}
+        so far. A search usually takes {RUN_TAKES_MINUTES.from} to {RUN_TAKES_MINUTES.to} minutes.
+      </p>
+    </div>
+  );
+}
+
 function Running(props: { view: SearchView }) {
   const words = STATE_WORDS[props.view.search.state] ?? STATE_WORDS.finding!;
   return (
     <section class="block lead-in" id="the-list">
       <p class="said">{words.said}</p>
-      <p class="note">{words.note(props.view, new Date())}</p>
+      <p class="note">{words.note(props.view)}</p>
       <ol class="arrivals">
         {arrivalOrder(props.view.companies).map((c) => (
           <Arrival c={c} />

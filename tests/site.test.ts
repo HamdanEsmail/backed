@@ -67,7 +67,10 @@ describe("the site", () => {
     expect(res.headers.get("content-security-policy")).toContain("style-src 'self' https://api.fontshare.com");
     expect(html).toContain('<form class="stage" method="post" action="/search"');
     expect(html).toContain('name="stage"');
-    expect(html).not.toContain("<script");
+    // One script, from this site, and the page works without it: it shows a pressed button working.
+    expect(html.match(/<script/g)).toHaveLength(1);
+    expect(html).toContain('<script src="/assets/wait.js" defer=""></script>');
+    expect(html).toMatch(/<button class="go" type="submit" data-busy="Starting the search…">\s*Find who backed companies like this\s*<\/button>/);
   });
 
   it("shows the featured search on the home: its line in the form, its first investor and the quote marked", async () => {
@@ -90,7 +93,8 @@ describe("the site", () => {
       expect(res.status).toBe(200);
       expect(html).toContain('<a href="/about">How it works</a>');
       expect(html).toContain('<a href="/score">The score</a>');
-      expect(html).not.toContain("<script");
+      // The one script is the site's own; nothing is inline and nothing comes from another host.
+      expect(html.match(/<script[^>]*>/g)).toEqual(['<script src="/assets/wait.js" defer="">']);
     }
   });
 
@@ -164,26 +168,53 @@ describe("the site", () => {
     expect(html).toContain("Proved: led by Copperline Ventures");
   });
 
-  it("says how long a search takes and when this one was started, while TinySet is finding", async () => {
+  it("shows a running search working: its steps, how far it is, a clock, and how long a search takes", async () => {
     const now = new Date();
     const r = await startAdminSearch(env, INPUT, null, now);
     if (!r.ok) throw new Error(r.error);
+    const set = (sql: string, ...binds: unknown[]) => env.DB.prepare(sql).bind(...binds).run();
+    const steps = (html: string) => /<ol class="wait-steps"[^>]*>([\s\S]*?)<\/ol>/.exec(html)?.[1] ?? "";
+
+    // Waiting its turn: no step has begun, and the bar only says the page is alive.
+    const queued = (await page(`/searches/${r.id}`)).html;
+    expect(steps(queued)).toBe("<li>Find companies</li><li>Check announcements</li><li>Rank investors</li>");
+    expect(queued).toContain('<div class="bar" role="progressbar" aria-label="Waiting its turn"></div>');
+
+    // Finding: the bar is how many companies TinySet has found of the 30 it looks for.
     await advance(env, r.id, now);
-    const startedAgo = (ms: number) => env.DB.prepare("UPDATE searches SET created_at = ? WHERE id = ?").bind(new Date(Date.now() - ms).toISOString(), r.id).run();
-    await startedAgo(9.5 * 60_000);
-    const { html } = await page(`/searches/${r.id}`);
-    expect(html).toContain("for up to 30 companies like this");
-    expect(html).toContain("That takes 5 to 20 minutes, and this search was started 9 minutes ago.");
-    await startedAgo(90_000);
-    expect((await page(`/searches/${r.id}`)).html).toContain("this search was started 1 minute ago.");
-    await startedAgo(20_000);
-    expect((await page(`/searches/${r.id}`)).html).toContain("this search was started less than a minute ago.");
+    tf.rows = [companyRow("row-a", { company: "Larder Loop", round_type: "Seed", announcement_date: "2026-06-12", lead_investor: "Copperline Ventures", announcement_url: URL_A })];
+    tf.pages[URL_A] = "Larder Loop raised a seed round led by Copperline Ventures.";
+    await advance(env, r.id, new Date(now.getTime() + 11_000));
+    await set("UPDATE searches SET created_at = ? WHERE id = ?", new Date(Date.now() - 9.5 * 60_000).toISOString(), r.id);
+    const finding = (await page(`/searches/${r.id}`)).html;
+    expect(steps(finding)).toBe('<li aria-current="step">Find companies</li><li>Check announcements</li><li>Rank investors</li>');
+    expect(finding).toContain('<progress class="meter" value="1" max="30">1 of 30</progress>');
+    expect(finding).toContain("1 of up to 30 companies found.");
+    expect(finding).toMatch(/<span class="clock" data-since="[^"]+">9:3\d<\/span> so far\. A search usually takes 5 to 20 minutes\./);
+    expect(finding).toContain("TinySet is searching the live web for up to 30 companies like this");
+
+    // Checking: the bar is how many announcements are read of those found.
+    await set("UPDATE searches SET state = 'checking' WHERE id = ?", r.id);
+    await set("UPDATE companies SET state = 'unchecked' WHERE search_id = ?", r.id);
+    const checking = (await page(`/searches/${r.id}`)).html;
+    expect(steps(checking)).toBe('<li class="done">Find companies</li><li aria-current="step">Check announcements</li><li>Rank investors</li>');
+    expect(checking).toContain('<progress class="meter" value="0" max="1">0 of 1</progress>');
+    expect(checking).toContain("0 of 1 announcements checked.");
+
+    // Ranking: the last step has no count to show, so the bar only moves.
+    await set("UPDATE searches SET state = 'ranking' WHERE id = ?", r.id);
+    const ranking = (await page(`/searches/${r.id}`)).html;
+    expect(steps(ranking)).toBe('<li class="done">Find companies</li><li class="done">Check announcements</li><li aria-current="step">Rank investors</li>');
+    expect(ranking).toContain('<div class="bar" role="progressbar" aria-label="Ranking the investors"></div>');
   });
 
   it("shows a ready search in full with no refresh, and a failed one with its sentence", async () => {
     const id = await readySearch();
     const ready = await page(`/searches/${id}`);
     expect(ready.html).not.toContain('http-equiv="refresh"');
+    // A finished search shows no steps, bar or clock.
+    expect(ready.html).not.toContain('class="wait-steps"');
+    expect(ready.html).not.toContain("data-since");
     expect(ready.html).toContain("Only 1 company like this was proved. The list is thin: read it as a start.");
     expect(ready.html).toContain("What TinySet was asked");
     expect(ready.html).not.toContain("None of these companies");

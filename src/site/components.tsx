@@ -317,7 +317,7 @@ export function StageForm(props: {
             <i>country</i>
           </label>
         </div>
-        <button class="go" type="submit">
+        <button class="go" type="submit" data-busy="Starting the search…">
           Find who backed companies like this
         </button>
         {props.error !== null ? (

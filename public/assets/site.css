@@ -309,3 +309,38 @@ pre code { font-weight: 400; }
     }
   }
 }
+
+/* Waiting: what a visitor watches while a search runs, on the stage, where it is in the first screen
+   of a phone. The three steps with the one it is on, a bar that is a real count where there is one
+   and only moves where there is none, and a clock. A pressed button says what it is doing and cannot
+   be pressed twice. A running page reloads every few seconds, so its stage does not rise in again. */
+.stage.live > * { animation: none; }
+.progress { max-width: 34rem; }
+.wait-steps { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: var(--step-small); font-weight: 500; color: var(--on-ink-muted); }
+.wait-steps li { display: flex; align-items: center; gap: 8px; }
+.wait-steps li::before { content: ""; flex: none; width: 9px; height: 9px; box-shadow: inset 0 0 0 1.5px currentColor; }
+.wait-steps li.done { color: var(--paper); }
+.wait-steps li.done::before { content: "✓"; width: auto; height: auto; box-shadow: none; font-weight: 700; line-height: 1; color: var(--bg); }
+.wait-steps li[aria-current="step"] { color: var(--paper); font-weight: 600; }
+.wait-steps li[aria-current="step"]::before { background: var(--bg); box-shadow: none; }
+.meter, .bar { display: block; width: 100%; height: 10px; margin-top: 16px; border: 0; background: rgba(255, 255, 255, .14); }
+.meter { appearance: none; -webkit-appearance: none; color: var(--bg); }
+.meter::-webkit-progress-bar { background: transparent; }
+.meter::-webkit-progress-value { background: var(--bg); }
+.meter::-moz-progress-bar { background: var(--bg); }
+.bar { position: relative; overflow: hidden; }
+.bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: var(--bg); }
+.wait-clock { margin-top: 12px; font-size: var(--step-small); line-height: 1.45; color: var(--on-ink-muted); }
+.wait-clock .clock { color: var(--paper); font-weight: 600; font-variant-numeric: tabular-nums; }
+form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; pointer-events: none; }
+form[aria-busy="true"] button[aria-disabled="true"]::after { content: ""; display: inline-block; width: .85em; height: .85em; margin-left: .6em; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; }
+@media (prefers-reduced-motion: no-preference) {
+  .bar::after { animation: bar-run 1.6s var(--ease) infinite; }
+  @keyframes bar-run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  .wait-steps li[aria-current="step"]::before { animation: step-now 1.2s var(--ease) infinite; }
+  @keyframes step-now { 50% { opacity: .25; } }
+  form[aria-busy="true"] button[aria-disabled="true"]::after { animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+/* With motion turned off the moving bar stands still as a faint full track; the clock still counts. */
+@media (prefers-reduced-motion: reduce) { .bar::after { width: 100%; opacity: .4; } }
