@@ -314,3 +314,20 @@ run and the page was filling as it should. But the page never said how long a ru
 search read as a broken one. The page of a search that TinySet is still filling now says that it looks for
 up to 30 companies, that this takes 5 to 20 minutes, and how many minutes ago the search was started.
 Live as version `2d2e7bdf` at 12:00 UTC.
+
+## A running search shows that it is working, 10 November
+
+A sentence was not enough: on a phone the first screen of a running search is the dark stage, and nothing
+on it moved. The stage now shows the three steps (find companies, check announcements, rank investors)
+with the one the search is on, a bar, and a clock. The bar is a real count where there is one: companies
+found of the 30 looked for, then announcements read of those found. Where there is none it only moves.
+The stage of a running page no longer rises in on every reload.
+
+The four sites share one small script, `public/assets/wait.js`, served from the site itself and loaded
+`defer`. Every page works without it. On a POST form it marks the form busy, swaps the button's words for
+its `data-busy` label, shows a spinner, and refuses a second press; a page brought back by the Back button
+is reset. On a waiting page it counts the clock every second between the page's own reloads. I pressed
+each live button in a real browser at phone width, with the sending stopped so nothing was started: the
+label changed, the form was busy, and it went once.
+
+Live as version `ae4d8b2b` at 12:55 UTC.
