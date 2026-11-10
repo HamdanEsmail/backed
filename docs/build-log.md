@@ -245,6 +245,9 @@ pages. After it, the home, the four pages, the three stored searches with their 
 page each answered 200, fifteen times out of fifteen for the pages, and the first screen of every page looked
 right at 1440 and 390 wide. The ledger was untouched at $2.915.
 
+Later the same day my name in the footer and on How it works became a link to my GitHub (version `55dd73be`).
+Every page carries it once, How it works twice.
+
 ## Paid calls
 
 TinySet runs and Monitor runs are the paid calls. A TinySet run is booked when it ends, from the wallet
