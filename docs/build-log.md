@@ -306,3 +306,11 @@ addresses; `wrangler tail` caught 39 of the 70, and every one ended `ok`:
 | Saved searches | 4 | 1 ms | 1 ms |
 | A search's page (restaurant) | 5 | 4 ms | 10 ms |
 | An investor's page | 3 | 3 ms | 3 ms |
+
+## A running search says how long it takes, 10 November
+
+I ran a search of my own from my phone and thought it was stuck. It was not: TinySet was 8 minutes into a
+run and the page was filling as it should. But the page never said how long a run takes, so a working
+search read as a broken one. The page of a search that TinySet is still filling now says that it looks for
+up to 30 companies, that this takes 5 to 20 minutes, and how many minutes ago the search was started.
+Live as version `2d2e7bdf` at 12:00 UTC.
